@@ -1,9 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import { Chantier } from '@/lib/types';
 import ChantierCard from '@/components/ChantierCard';
 import { useRouter } from 'next/navigation';
 import UserMenu from '@/components/UserMenu';
+import DeleteChantierModal from '@/components/DeleteChantierModal';
 
 interface ChantiersListProps {
   chantiers: Chantier[];
@@ -11,8 +13,33 @@ interface ChantiersListProps {
   companyName: string;
 }
 
-export default function ChantiersList({ chantiers, userEmail, companyName }: ChantiersListProps) {
+export default function ChantiersList({ chantiers: initialChantiers, userEmail, companyName }: ChantiersListProps) {
   const router = useRouter();
+  const [chantiers, setChantiers] = useState(initialChantiers);
+  const [deleteTarget, setDeleteTarget] = useState<Chantier | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  function handleDeleteRequest(id: string) {
+    const chantier = chantiers.find((c) => c.id === id);
+    if (chantier) setDeleteTarget(chantier);
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+
+    try {
+      const res = await fetch(`/api/chantiers/${deleteTarget.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setChantiers((prev) => prev.filter((c) => c.id !== deleteTarget.id));
+        setDeleteTarget(null);
+      }
+    } catch (err) {
+      console.error('Erreur suppression:', err);
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -42,7 +69,7 @@ export default function ChantiersList({ chantiers, userEmail, companyName }: Cha
         ) : (
           <div className="space-y-3">
             {chantiers.map((chantier) => (
-              <ChantierCard key={chantier.id} chantier={chantier} />
+              <ChantierCard key={chantier.id} chantier={chantier} onDelete={handleDeleteRequest} />
             ))}
           </div>
         )}
@@ -62,6 +89,16 @@ export default function ChantiersList({ chantiers, userEmail, companyName }: Cha
           </button>
         </div>
       </div>
+
+      {/* Modale de confirmation */}
+      {deleteTarget && (
+        <DeleteChantierModal
+          clientName={`${deleteTarget.client_prenom} ${deleteTarget.client_nom}`.trim()}
+          deleting={deleting}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 }

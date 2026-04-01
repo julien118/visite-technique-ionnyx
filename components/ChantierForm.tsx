@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Chantier, ChantierStatut } from '@/lib/types';
 import AddressAutocomplete from './AddressAutocomplete';
+import DeleteChantierModal from './DeleteChantierModal';
 
 interface ChantierFormProps {
   chantier?: Chantier;
@@ -45,6 +46,8 @@ export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [chantierId, setChantierId] = useState<string | null>(chantier?.id || null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const isNew = !chantier;
@@ -163,6 +166,21 @@ export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
   function handleViewReport() {
     if (!chantierId) return;
     router.push(`/chantiers/${chantierId}/rapport`);
+  }
+
+  async function handleDelete() {
+    if (!chantierId) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/chantiers/${chantierId}`, { method: 'DELETE' });
+      if (res.ok) {
+        router.push('/chantiers');
+      }
+    } catch (err) {
+      console.error('Erreur suppression:', err);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   // Bouton d'action principal selon le statut
@@ -378,6 +396,16 @@ export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
               <option value="sous_traitance">Sous-traitance</option>
             </select>
           </div>
+
+          {/* Bouton supprimer (uniquement pour les chantiers existants) */}
+          {chantierId && (
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="w-full text-red-500 text-sm font-medium py-3 mt-4 active:text-red-700 transition-colors"
+            >
+              Supprimer ce chantier
+            </button>
+          )}
         </div>
       </main>
 
@@ -387,6 +415,16 @@ export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
           {renderActionButton()}
         </div>
       </div>
+
+      {/* Modale de confirmation de suppression */}
+      {showDeleteModal && (
+        <DeleteChantierModal
+          clientName={`${form.client_prenom} ${form.client_nom}`.trim()}
+          deleting={deleting}
+          onConfirm={handleDelete}
+          onCancel={() => setShowDeleteModal(false)}
+        />
+      )}
     </div>
   );
 }
