@@ -29,7 +29,7 @@ const STATUT_ICONS: Record<ChantierStatut, React.ReactNode> = {
 
 export default function StatusBadge({ statut }: StatusBadgeProps) {
   return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${STATUT_COLORS[statut]}`}>
+    <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${STATUT_COLORS[statut]}`}>
       {STATUT_ICONS[statut]}
       {STATUT_LABELS[statut]}
     </span>

@@ -19,7 +19,7 @@ const TABS: { key: FilterTab; label: string }[] = [
   { key: 'tous', label: 'Tous' },
   { key: 'planifie', label: 'Planifiés' },
   { key: 'en_cours', label: 'En cours' },
-  { key: 'termine', label: 'Terminés' },
+  { key: 'termine', label: 'Finis' },
   { key: 'rapport_genere', label: 'Rapports' },
 ];
 
@@ -105,7 +105,7 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header avec dégradé */}
+      {/* Header */}
       <header className="bg-gradient-to-br from-[#1E3A5F] to-[#162d4a] text-white px-4 py-5">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <div>
@@ -117,11 +117,11 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
       </header>
 
       {/* Onglets + Recherche (sticky) */}
-      <div className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur-sm border-b border-gray-100">
+      <div className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200">
         {/* Onglets */}
         <div className="max-w-lg mx-auto">
           <div
-            className="flex gap-2 px-4 py-3 overflow-x-auto scrollbar-hide"
+            className="flex gap-2 px-4 pt-3 pb-0 overflow-x-auto scrollbar-hide"
             style={{ WebkitOverflowScrolling: 'touch' }}
           >
             {TABS.map((tab) => {
@@ -131,7 +131,7 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
-                  className={`flex-shrink-0 min-h-[44px] px-4 rounded-full text-sm font-semibold transition-all whitespace-nowrap ${
+                  className={`flex-shrink-0 min-h-[44px] px-3.5 rounded-full text-sm font-semibold transition-all whitespace-nowrap ${
                     isActive
                       ? 'bg-[#1E3A5F] text-white shadow-sm'
                       : 'bg-gray-100 text-gray-600 active:bg-gray-200'
@@ -141,15 +141,20 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
                 </button>
               );
             })}
+            {/* Padding de fin pour que le dernier onglet soit visible */}
+            <div className="flex-shrink-0 w-4" aria-hidden="true" />
           </div>
         </div>
 
+        {/* Espace 16px entre onglets et recherche */}
+        <div className="h-4" />
+
         {/* Barre de recherche */}
-        <div className="max-w-lg mx-auto px-4 pb-3">
+        <div className="max-w-lg mx-auto px-4 pb-4">
           <div className="relative">
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300 pointer-events-none"
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -163,7 +168,7 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Rechercher un client, une adresse..."
-              className="w-full min-h-[48px] h-12 pl-11 pr-10 text-base bg-[#F9FAFB] border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent focus:bg-white outline-none transition-colors"
+              className="w-full h-12 pl-11 pr-10 text-base bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent focus:bg-white outline-none transition-colors"
             />
             {search && (
               <button
@@ -179,13 +184,13 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
         </div>
       </div>
 
-      {/* Liste scrollable */}
+      {/* Liste scrollable — 16px de marge avant la première carte */}
       <main
         ref={listRef}
         onScroll={handleListScroll}
         className="flex-1 overflow-y-auto"
       >
-        <div className="max-w-lg mx-auto px-4 py-4 pb-32">
+        <div className="max-w-lg mx-auto px-4 pt-4 pb-32">
           {chantiers.length === 0 ? (
             <div className="text-center py-16">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-200 rounded-full mb-4">
@@ -201,7 +206,7 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
               <p className="text-gray-400 text-base">Aucun résultat</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="flex flex-col gap-3">
               {filtered.map((chantier) => (
                 <ChantierCard key={chantier.id} chantier={chantier} onDelete={handleDeleteRequest} />
               ))}

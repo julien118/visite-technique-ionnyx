@@ -80,15 +80,15 @@ export const STATUT_LABELS: Record<ChantierStatut, string> = {
 };
 
 export const STATUT_COLORS: Record<ChantierStatut, string> = {
-  planifie: 'bg-[#DBEAFE] text-[#1E40AF]',
-  en_cours: 'bg-[#FFF7ED] text-[#C2410C]',
-  termine: 'bg-[#FEF9C3] text-[#A16207]',
-  rapport_genere: 'bg-[#DCFCE7] text-[#15803D]',
+  planifie: 'bg-blue-100 text-blue-700',
+  en_cours: 'bg-orange-100 text-orange-700',
+  termine: 'bg-yellow-100 text-yellow-700',
+  rapport_genere: 'bg-green-100 text-green-700',
 };
 
 export const STATUT_BORDER_COLORS: Record<ChantierStatut, string> = {
-  planifie: 'bg-[#1E40AF]',
-  en_cours: 'bg-[#F97316]',
-  termine: 'bg-[#A16207]',
-  rapport_genere: 'bg-[#15803D]',
+  planifie: 'border-blue-400',
+  en_cours: 'border-orange-400',
+  termine: 'border-yellow-400',
+  rapport_genere: 'border-green-400',
 };
