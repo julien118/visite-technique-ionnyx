@@ -15,15 +15,14 @@ interface ChantiersListProps {
 
 type FilterTab = 'tous' | ChantierStatut;
 
-const TABS: { key: FilterTab; label: string; statuts: ChantierStatut[] }[] = [
-  { key: 'tous', label: 'Tous', statuts: [] },
-  { key: 'planifie', label: 'Planifiés', statuts: ['planifie'] },
-  { key: 'en_cours', label: 'En cours', statuts: ['en_cours'] },
-  { key: 'termine', label: 'Terminés', statuts: ['termine'] },
-  { key: 'rapport_genere', label: 'Rapports', statuts: ['rapport_genere'] },
+const TABS: { key: FilterTab; label: string }[] = [
+  { key: 'tous', label: 'Tous' },
+  { key: 'planifie', label: 'Planifiés' },
+  { key: 'en_cours', label: 'En cours' },
+  { key: 'termine', label: 'Terminés' },
+  { key: 'rapport_genere', label: 'Rapports' },
 ];
 
-// Priorité de tri : en_cours et planifie en premier
 const STATUT_PRIORITY: Record<ChantierStatut, number> = {
   en_cours: 0,
   planifie: 1,
@@ -50,7 +49,6 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Compteurs par statut
   const counts = useMemo(() => {
     const c: Record<string, number> = { tous: chantiers.length };
     for (const ch of chantiers) {
@@ -59,16 +57,13 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
     return c;
   }, [chantiers]);
 
-  // Filtrage par onglet + recherche
   const filtered = useMemo(() => {
     let result = chantiers;
 
-    // Filtre par statut
     if (activeTab !== 'tous') {
       result = result.filter((c) => c.statut === activeTab);
     }
 
-    // Filtre par recherche
     if (search.trim()) {
       const q = search.toLowerCase().trim();
       result = result.filter((c) =>
@@ -102,7 +97,6 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
     }
   }
 
-  // Fermer le clavier quand on scrolle la liste
   function handleListScroll() {
     if (document.activeElement === searchRef.current) {
       searchRef.current?.blur();
@@ -111,19 +105,19 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header */}
-      <header className="bg-[#1E3A5F] text-white px-4 py-4">
+      {/* Header avec dégradé */}
+      <header className="bg-gradient-to-br from-[#1E3A5F] to-[#162d4a] text-white px-4 py-5">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">{companyName || userEmail.split('@')[0]}</h1>
-            <p className="text-sm text-blue-200">Assistant de Visite</p>
+            <h1 className="text-2xl font-bold tracking-tight">{companyName || userEmail.split('@')[0]}</h1>
+            <p className="text-sm text-blue-300/80 mt-0.5">Assistant de Visite</p>
           </div>
           <UserMenu />
         </div>
       </header>
 
       {/* Onglets + Recherche (sticky) */}
-      <div className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200">
+      <div className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur-sm border-b border-gray-100">
         {/* Onglets */}
         <div className="max-w-lg mx-auto">
           <div
@@ -137,10 +131,10 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
-                  className={`flex-shrink-0 min-h-[44px] px-4 rounded-full text-sm font-semibold transition-colors whitespace-nowrap ${
+                  className={`flex-shrink-0 min-h-[44px] px-4 rounded-full text-sm font-semibold transition-all whitespace-nowrap ${
                     isActive
-                      ? 'bg-[#1E3A5F] text-white'
-                      : 'bg-white text-gray-600 border border-gray-200 active:bg-gray-100'
+                      ? 'bg-[#1E3A5F] text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-600 active:bg-gray-200'
                   }`}
                 >
                   {tab.label} ({count})
@@ -153,10 +147,9 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
         {/* Barre de recherche */}
         <div className="max-w-lg mx-auto px-4 pb-3">
           <div className="relative">
-            {/* Icône loupe */}
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none"
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300 pointer-events-none"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -170,13 +163,12 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Rechercher un client, une adresse..."
-              className="w-full min-h-[48px] h-12 pl-11 pr-10 text-base bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none"
+              className="w-full min-h-[48px] h-12 pl-11 pr-10 text-base bg-[#F9FAFB] border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent focus:bg-white outline-none transition-colors"
             />
-            {/* Bouton X pour effacer */}
             {search && (
               <button
                 onClick={() => setSearch('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full text-gray-400 active:bg-gray-100"
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full text-gray-400 active:bg-gray-200"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -193,7 +185,7 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
         onScroll={handleListScroll}
         className="flex-1 overflow-y-auto"
       >
-        <div className="max-w-lg mx-auto px-4 py-4 pb-28">
+        <div className="max-w-lg mx-auto px-4 py-4 pb-32">
           {chantiers.length === 0 ? (
             <div className="text-center py-16">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-200 rounded-full mb-4">
@@ -219,11 +211,11 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
       </main>
 
       {/* Bouton flottant "Nouvelle visite" */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-gray-50 via-gray-50 to-transparent">
+      <div className="fixed bottom-0 left-0 right-0 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-gray-50 via-gray-50 to-transparent">
         <div className="max-w-lg mx-auto">
           <button
             onClick={() => router.push('/chantiers/nouveau')}
-            className="w-full h-14 bg-[#F97316] text-white font-bold text-lg rounded-xl shadow-lg active:bg-orange-600 transition-colors flex items-center justify-center gap-2"
+            className="w-full h-14 bg-[#F97316] text-white font-bold text-lg rounded-xl shadow-lg shadow-orange-200 active:bg-orange-600 active:shadow-md transition-all flex items-center justify-center gap-2"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />

@@ -1,6 +1,6 @@
 'use client';
 
-import { Chantier } from '@/lib/types';
+import { Chantier, STATUT_BORDER_COLORS } from '@/lib/types';
 import { formatDateShort } from '@/lib/utils';
 import StatusBadge from './StatusBadge';
 import { useRouter } from 'next/navigation';
@@ -28,7 +28,6 @@ export default function ChantierCard({ chantier, onDelete }: ChantierCardProps) 
     const dx = e.touches[0].clientX - touchStartX.current;
     const dy = e.touches[0].clientY - touchStartY.current;
 
-    // Si le mouvement vertical est plus grand, on laisse le scroll
     if (!isSwiping.current && Math.abs(dy) > Math.abs(dx)) return;
 
     if (dx < -10) {
@@ -49,6 +48,8 @@ export default function ChantierCard({ chantier, onDelete }: ChantierCardProps) 
     if (isSwiping.current) return;
     router.push(`/chantiers/${chantier.id}`);
   }
+
+  const borderColor = STATUT_BORDER_COLORS[chantier.statut];
 
   return (
     <div className="relative overflow-hidden rounded-xl">
@@ -71,38 +72,46 @@ export default function ChantierCard({ chantier, onDelete }: ChantierCardProps) 
         onTouchEnd={handleTouchEnd}
         onClick={handleClick}
         style={{ transform: `translateX(${offsetX}px)`, transition: isSwiping.current ? 'none' : 'transform 0.2s ease-out' }}
-        className="relative bg-white border border-gray-200 p-4 text-left active:bg-gray-50 transition-colors cursor-pointer rounded-xl"
+        className="relative bg-white border border-gray-100 rounded-xl cursor-pointer active:bg-gray-50/50 transition-colors shadow-sm overflow-hidden flex"
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold text-gray-900 truncate">
-              {chantier.client_prenom} {chantier.client_nom}
-            </p>
-            {chantier.client_adresse && (
-              <p className="text-sm text-gray-500 truncate mt-0.5">
-                {chantier.client_adresse}
-              </p>
-            )}
-            <p className="text-sm text-gray-600 font-medium mt-1 line-clamp-2">
-              {chantier.objet_travaux || <span className="text-gray-300 font-normal italic">Objet non renseigné</span>}
-            </p>
-            <p className="text-sm text-gray-400 mt-1">
-              {formatDateShort(chantier.date_visite)}
-            </p>
-          </div>
+        {/* Bande de couleur à gauche */}
+        <div className={`w-1 flex-shrink-0 ${borderColor}`} />
 
-          <div className="flex items-start gap-2">
-            <StatusBadge statut={chantier.statut} />
-            {/* Bouton poubelle desktop */}
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete(chantier.id); }}
-              className="hidden md:flex items-center justify-center w-8 h-8 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-              title="Supprimer"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
+        {/* Contenu */}
+        <div className="flex-1 p-4 pl-3.5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-gray-900 truncate">
+                {chantier.client_prenom} {chantier.client_nom}
+              </p>
+              {chantier.client_adresse && (
+                <p className="text-sm text-gray-500 truncate mt-0.5">
+                  {chantier.client_adresse}
+                </p>
+              )}
+              {chantier.objet_travaux && (
+                <p className="text-sm text-gray-500 mt-1 line-clamp-2">
+                  {chantier.objet_travaux}
+                </p>
+              )}
+              <p className="text-xs text-gray-400 mt-1.5">
+                {formatDateShort(chantier.date_visite)}
+              </p>
+            </div>
+
+            <div className="flex items-start gap-1.5 flex-shrink-0">
+              <StatusBadge statut={chantier.statut} />
+              {/* Bouton poubelle desktop */}
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(chantier.id); }}
+                className="hidden md:flex items-center justify-center w-8 h-8 rounded-lg text-gray-200 hover:text-red-500 hover:bg-red-50 transition-colors"
+                title="Supprimer"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>
