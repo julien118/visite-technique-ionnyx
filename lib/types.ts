@@ -80,8 +80,8 @@ export const STATUT_LABELS: Record<ChantierStatut, string> = {
 };
 
 export const STATUT_COLORS: Record<ChantierStatut, string> = {
-  planifie: 'bg-yellow-100 text-yellow-800',
-  en_cours: 'bg-blue-100 text-blue-800',
-  termine: 'bg-gray-100 text-gray-800',
-  rapport_genere: 'bg-green-100 text-green-800',
+  planifie: 'bg-gray-100 text-gray-600',
+  en_cours: 'bg-orange-100 text-orange-700',
+  termine: 'bg-yellow-100 text-yellow-700',
+  rapport_genere: 'bg-green-100 text-green-700',
 };

@@ -1,4 +1,4 @@
-// Helper pour l'API OpenAI GPT-4.1
+// Helper pour l'API Anthropic Claude
 
 import { RapportContenu } from './types';
 import { SYSTEM_PROMPT_RAPPORT, buildUserPrompt } from './prompts';
@@ -28,36 +28,42 @@ export async function generateReport(
 ): Promise<RapportContenu> {
   const userPrompt = buildUserPrompt(chantier, items);
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+      'x-api-key': process.env.ANTHROPIC_API_KEY!,
+      'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'gpt-4.1',
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4096,
+      system: SYSTEM_PROMPT_RAPPORT,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT_RAPPORT },
         { role: 'user', content: userPrompt },
       ],
-      temperature: 0.3,
-      response_format: { type: 'json_object' },
     }),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('Erreur OpenAI:', response.status, errorText);
-    throw new Error(`Erreur OpenAI: ${response.status}`);
+    console.error('Erreur Anthropic:', response.status, errorText);
+    throw new Error(`Erreur Anthropic: ${response.status}`);
   }
 
   const result = await response.json();
-  const content = result.choices[0]?.message?.content;
+  const content = result.content?.[0]?.text;
 
   if (!content) {
-    throw new Error('Réponse vide de OpenAI');
+    throw new Error('Réponse vide de Anthropic');
   }
 
-  const parsed: RapportContenu = JSON.parse(content);
+  // Extraire le JSON du contenu (au cas où il y aurait du texte autour)
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error('Pas de JSON trouvé dans la réponse');
+  }
+
+  const parsed: RapportContenu = JSON.parse(jsonMatch[0]);
   return parsed;
 }

@@ -3,6 +3,7 @@
 import { Chantier } from '@/lib/types';
 import ChantierCard from '@/components/ChantierCard';
 import { useRouter } from 'next/navigation';
+import UserMenu from '@/components/UserMenu';
 
 interface ChantiersListProps {
   chantiers: Chantier[];
@@ -21,14 +22,7 @@ export default function ChantiersList({ chantiers, userEmail }: ChantiersListPro
             <h1 className="text-lg font-bold">Mes Chantiers</h1>
             <p className="text-sm text-blue-200 truncate max-w-[200px]">{userEmail}</p>
           </div>
-          <form action="/api/auth/signout" method="POST">
-            <button
-              type="submit"
-              className="text-sm text-blue-200 hover:text-white active:text-white transition-colors"
-            >
-              Déconnexion
-            </button>
-          </form>
+          <UserMenu />
         </div>
       </header>
 

@@ -5,9 +5,10 @@ import { useRef, useState } from 'react';
 interface AudioRecorderProps {
   onRecordingComplete: (audioBlob: Blob) => void;
   disabled?: boolean;
+  onRecordingChange?: (recording: boolean) => void;
 }
 
-export default function AudioRecorder({ onRecordingComplete, disabled }: AudioRecorderProps) {
+export default function AudioRecorder({ onRecordingComplete, disabled, onRecordingChange }: AudioRecorderProps) {
   const [recording, setRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -40,12 +41,14 @@ export default function AudioRecorder({ onRecordingComplete, disabled }: AudioRe
 
         const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
         setRecording(false);
+        onRecordingChange?.(false);
         onRecordingComplete(audioBlob);
       };
 
       mediaRecorderRef.current = mediaRecorder;
       mediaRecorder.start();
       setRecording(true);
+      onRecordingChange?.(true);
     } catch (err) {
       console.error('Erreur accès micro:', err);
       alert('Impossible d\'accéder au microphone. Vérifiez les permissions.');
@@ -58,21 +61,20 @@ export default function AudioRecorder({ onRecordingComplete, disabled }: AudioRe
       disabled={disabled}
       className={`flex-1 h-16 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
         recording
-          ? 'bg-red-500 text-white animate-pulse shadow-lg shadow-red-500/30'
-          : 'bg-[#1E3A5F] text-white active:bg-[#162d4a]'
+          ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
+          : 'bg-[#F97316] text-white active:bg-orange-600'
       }`}
+      style={recording ? { animation: 'pulse-record 1.5s ease-in-out infinite' } : undefined}
     >
       {recording ? (
         <>
-          {/* Icône stop */}
           <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
             <rect x="6" y="6" width="12" height="12" rx="2" />
           </svg>
-          Stop
+          Arrêter
         </>
       ) : (
         <>
-          {/* Icône micro */}
           <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
           </svg>

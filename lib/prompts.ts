@@ -25,6 +25,16 @@ Règles de rédaction :
 - Regrouper les informations d'accès chantier si mentionnées
 - Extraire la durée estimée si mentionnée
 
+Règles supplémentaires OBLIGATOIRES :
+
+1. LÉGENDES DE PHOTOS : Chaque photo doit avoir une légende descriptive et concrète, extraite du contenu vocal de l'artisan. Ne mets JAMAIS de légende générique comme "Vue du chantier" ou "Photo du mur". Utilise les détails précis : dimensions, matériaux, ce qui est à faire. Exemple : "Mur porteur en parpaing de 20 — ouverture prévue de 5,36 m × 2,97 m, façade donnant rue Baptiste Marcet".
+
+2. MESURES EN GRAS : Toutes les mesures et dimensions dans le texte des observations ET dans les légendes doivent être entourées de **...** (markdown bold). Exemples : **5,36 m**, **2,97 m de hauteur**, **parpaing de 20**, **17,5 m²**, **3 jours**, **1 semaine**. Les matériaux avec une dimension (parpaing de 20, HEB 200, IPN 180) sont aussi en gras.
+
+3. CORRÉLATION PHOTO-OBSERVATION RENFORCÉE : Quand tu corrèles une photo à une observation, assure-toi que le lien est évident dans la légende. Si l'artisan a dit "là, c'est le sol parquet qu'il faut protéger" juste avant de prendre une photo, la légende doit être "Sol parquet existant — protection nécessaire avant travaux" et pas "Vue du sol".
+
+4. DONNÉES CLIENT : Reprends EXACTEMENT les informations client fournies dans la section "INFORMATIONS CLIENT" ci-dessous. Ne modifie PAS le téléphone, l'email, l'adresse ou toute autre donnée — recopie-les à l'identique dans le JSON de sortie.
+
 Format de sortie : JSON strict, conforme au schéma fourni. Ne rien ajouter en dehors du JSON.
 
 Le JSON doit respecter ce schéma exact :

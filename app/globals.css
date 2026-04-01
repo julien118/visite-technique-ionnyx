@@ -19,3 +19,27 @@ body {
 input, select, textarea {
   font-size: 16px;
 }
+
+/* Animation pulse pour l'enregistrement vocal */
+@keyframes pulse-record {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+/* Animation slide-up pour les modales */
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+/* Animation fade-in pour les toasts */
+@keyframes fade-in {
+  from { opacity: 0; transform: translate(-50%, -8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}

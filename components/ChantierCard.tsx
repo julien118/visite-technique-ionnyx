@@ -31,6 +31,11 @@ export default function ChantierCard({ chantier }: ChantierCardProps) {
             </p>
           )}
 
+          {/* Objet des travaux — toujours visible */}
+          <p className="text-sm text-gray-600 font-medium mt-1 line-clamp-2">
+            {chantier.objet_travaux || <span className="text-gray-300 font-normal italic">Objet non renseigné</span>}
+          </p>
+
           {/* Date */}
           <p className="text-sm text-gray-400 mt-1">
             {formatDateShort(chantier.date_visite)}
@@ -41,12 +46,6 @@ export default function ChantierCard({ chantier }: ChantierCardProps) {
         <StatusBadge statut={chantier.statut} />
       </div>
 
-      {/* Objet des travaux (si renseigné) */}
-      {chantier.objet_travaux && (
-        <p className="text-sm text-gray-500 mt-2 line-clamp-2">
-          {chantier.objet_travaux}
-        </p>
-      )}
     </button>
   );
 }

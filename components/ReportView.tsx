@@ -1,11 +1,26 @@
 'use client';
 
 import { RapportContenu, RapportObservation } from '@/lib/types';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 interface ReportViewProps {
   contenu: RapportContenu;
   onUpdate: (contenu: RapportContenu) => void;
+}
+
+// Parse markdown bold (**text**) into React elements
+function renderBoldText(text: string) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong key={i} className="font-bold text-gray-900">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return part;
+  });
 }
 
 export default function ReportView({ contenu, onUpdate }: ReportViewProps) {
@@ -81,7 +96,7 @@ export default function ReportView({ contenu, onUpdate }: ReportViewProps) {
       {contenu.acces_chantier && (
         <div className="bg-white border border-t-0 border-gray-200 p-5">
           <h3 className="text-sm font-bold text-[#1E3A5F] mb-2">ACCÈS CHANTIER</h3>
-          <p className="text-sm text-gray-700">{contenu.acces_chantier}</p>
+          <p className="text-sm text-gray-700">{renderBoldText(contenu.acces_chantier)}</p>
         </div>
       )}
 
@@ -89,7 +104,7 @@ export default function ReportView({ contenu, onUpdate }: ReportViewProps) {
       {contenu.duree_estimee && (
         <div className="bg-white border border-t-0 border-gray-200 p-5">
           <h3 className="text-sm font-bold text-[#1E3A5F] mb-2">DURÉE ESTIMÉE</h3>
-          <p className="text-sm text-gray-700">{contenu.duree_estimee}</p>
+          <p className="text-sm text-gray-700">{renderBoldText(contenu.duree_estimee)}</p>
         </div>
       )}
 
@@ -97,27 +112,113 @@ export default function ReportView({ contenu, onUpdate }: ReportViewProps) {
       {contenu.notes && (
         <div className="bg-white border border-t-0 border-gray-200 p-5 rounded-b-xl">
           <h3 className="text-sm font-bold text-[#1E3A5F] mb-2">NOTES</h3>
-          <p className="text-sm text-gray-700">{contenu.notes}</p>
+          <p className="text-sm text-gray-700">{renderBoldText(contenu.notes)}</p>
         </div>
       )}
 
-      {/* Vue plein écran photo */}
+      {/* Footer */}
+      <div className="text-center py-4">
+        <p className="text-xs text-gray-400">Rapport généré par IONNYX — Assistant de Visite IA</p>
+      </div>
+
+      {/* Lightbox plein écran avec pinch-to-zoom */}
       {fullscreenPhoto && (
-        <div
-          className="fixed inset-0 bg-black z-50 flex items-center justify-center"
-          onClick={() => setFullscreenPhoto(null)}
-        >
-          <button
-            onClick={() => setFullscreenPhoto(null)}
-            className="absolute top-4 right-4 text-white bg-black/50 rounded-full p-2"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-          <img src={fullscreenPhoto} alt="Photo" className="max-w-full max-h-full object-contain" />
-        </div>
+        <PhotoLightbox url={fullscreenPhoto} onClose={() => setFullscreenPhoto(null)} />
       )}
+    </div>
+  );
+}
+
+// Lightbox avec pinch-to-zoom
+function PhotoLightbox({ url, onClose }: { url: string; onClose: () => void }) {
+  const [scale, setScale] = useState(1);
+  const [translate, setTranslate] = useState({ x: 0, y: 0 });
+  const lastDistRef = useRef(0);
+  const lastPanRef = useRef({ x: 0, y: 0 });
+  const imgRef = useRef<HTMLDivElement>(null);
+
+  function handleTouchStart(e: React.TouchEvent) {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      lastDistRef.current = Math.sqrt(dx * dx + dy * dy);
+    } else if (e.touches.length === 1 && scale > 1) {
+      lastPanRef.current = { x: e.touches[0].clientX - translate.x, y: e.touches[0].clientY - translate.y };
+    }
+  }
+
+  function handleTouchMove(e: React.TouchEvent) {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (lastDistRef.current > 0) {
+        const newScale = Math.min(Math.max(scale * (dist / lastDistRef.current), 1), 5);
+        setScale(newScale);
+        if (newScale === 1) setTranslate({ x: 0, y: 0 });
+      }
+      lastDistRef.current = dist;
+    } else if (e.touches.length === 1 && scale > 1) {
+      setTranslate({
+        x: e.touches[0].clientX - lastPanRef.current.x,
+        y: e.touches[0].clientY - lastPanRef.current.y,
+      });
+    }
+  }
+
+  function handleTouchEnd() {
+    lastDistRef.current = 0;
+  }
+
+  function handleDoubleClick() {
+    if (scale > 1) {
+      setScale(1);
+      setTranslate({ x: 0, y: 0 });
+    } else {
+      setScale(2.5);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black z-50 flex items-center justify-center"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 text-white bg-black/50 rounded-full p-3 z-10"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+      {scale > 1 && (
+        <button
+          onClick={() => { setScale(1); setTranslate({ x: 0, y: 0 }); }}
+          className="absolute top-4 left-4 text-white bg-black/50 rounded-full px-3 py-2 text-xs z-10"
+        >
+          Réinitialiser
+        </button>
+      )}
+      <div
+        ref={imgRef}
+        onDoubleClick={handleDoubleClick}
+        style={{
+          transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
+          transition: scale === 1 ? 'transform 0.2s ease' : 'none',
+        }}
+        className="w-full h-full flex items-center justify-center"
+      >
+        <img
+          src={url}
+          alt="Photo"
+          className="max-w-full max-h-full object-contain"
+          draggable={false}
+        />
+      </div>
     </div>
   );
 }
@@ -132,7 +233,7 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-// Bloc observation
+// Bloc observation — photos GRANDES pleine largeur
 function ObservationBlock({
   obs,
   index,
@@ -160,7 +261,7 @@ function ObservationBlock({
         OBSERVATION {index + 1} — {obs.titre}
       </h3>
 
-      {/* Description — clic pour éditer */}
+      {/* Description — clic pour éditer, avec markdown bold */}
       {isEditing ? (
         <div>
           <textarea
@@ -184,26 +285,29 @@ function ObservationBlock({
           onClick={onStartEdit}
           className="text-sm text-gray-700 leading-relaxed cursor-pointer hover:bg-gray-50 rounded p-1 -m-1 transition-colors"
         >
-          {obs.description}
+          {renderBoldText(obs.description)}
         </p>
       )}
 
-      {/* Photos */}
+      {/* Photos — GRANDES, pleine largeur */}
       {obs.photos.length > 0 && (
-        <div className="flex gap-2 mt-3 overflow-x-auto">
+        <div className="space-y-3 mt-4">
           {obs.photos.map((photo, pIdx) => (
             <button
               key={pIdx}
               onClick={() => onPhotoClick(photo.url)}
-              className="shrink-0"
+              className="w-full text-left"
             >
               <img
                 src={photo.url}
                 alt={photo.legende}
-                className="w-32 h-24 object-cover rounded-lg"
+                className="w-full rounded-lg object-cover"
+                style={{ maxHeight: '400px' }}
               />
               {photo.legende && (
-                <p className="text-xs text-gray-400 mt-1 w-32 truncate">{photo.legende}</p>
+                <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                  {renderBoldText(photo.legende)}
+                </p>
               )}
             </button>
           ))}
@@ -212,11 +316,11 @@ function ObservationBlock({
 
       {/* Points de vigilance */}
       {obs.points_vigilance.length > 0 && (
-        <div className="mt-3 p-3 bg-amber-50 rounded-lg">
+        <div className="mt-4 p-3 bg-amber-50 rounded-lg">
           <p className="text-xs font-bold text-amber-800 mb-1">Points de vigilance</p>
           <ul className="list-disc list-inside text-xs text-amber-700 space-y-0.5">
             {obs.points_vigilance.map((pv, pvIdx) => (
-              <li key={pvIdx}>{pv}</li>
+              <li key={pvIdx}>{renderBoldText(pv)}</li>
             ))}
           </ul>
         </div>

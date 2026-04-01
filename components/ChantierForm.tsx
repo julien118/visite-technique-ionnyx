@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Chantier, ChantierStatut } from '@/lib/types';
+import AddressAutocomplete from './AddressAutocomplete';
 
 interface ChantierFormProps {
   chantier?: Chantier;
@@ -28,6 +29,14 @@ function toLocalDatetimeValue(isoString: string): string {
   const offset = date.getTimezoneOffset();
   const local = new Date(date.getTime() - offset * 60 * 1000);
   return local.toISOString().slice(0, 16);
+}
+
+function getDatePart(datetimeValue: string): string {
+  return datetimeValue.slice(0, 10);
+}
+
+function getTimePart(datetimeValue: string): string {
+  return datetimeValue.slice(11, 16);
 }
 
 export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
@@ -129,17 +138,21 @@ export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
-  function handleStartVisit() {
+  async function handleStartVisit() {
     if (!chantierId) return;
 
     // Mettre le statut en "en_cours" puis naviguer
-    supabase
-      .from('chantiers')
-      .update({ statut: 'en_cours' })
-      .eq('id', chantierId)
-      .then(() => {
-        router.push(`/chantiers/${chantierId}/visite`);
-      });
+    try {
+      await supabase
+        .from('chantiers')
+        .update({ statut: 'en_cours' })
+        .eq('id', chantierId);
+    } catch (err) {
+      console.error('Erreur mise à jour statut:', err);
+    }
+
+    // Naviguer même si la mise à jour échoue
+    router.push(`/chantiers/${chantierId}/visite`);
   }
 
   function handleResumeVisit() {
@@ -227,11 +240,11 @@ export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
 
       {/* Formulaire */}
       <main className="max-w-lg mx-auto px-4 py-6 pb-28">
-        <div className="space-y-5">
+        <div className="space-y-6">
           {/* Prénom + Nom sur la même ligne */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Prénom client *
               </label>
               <input
@@ -239,11 +252,12 @@ export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
                 value={form.client_prenom}
                 onChange={(e) => updateField('client_prenom', e.target.value)}
                 placeholder="Jean"
-                className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none"
+                autoComplete="given-name"
+                className="w-full min-h-[48px] h-12 px-4 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Nom client *
               </label>
               <input
@@ -251,69 +265,21 @@ export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
                 value={form.client_nom}
                 onChange={(e) => updateField('client_nom', e.target.value)}
                 placeholder="Dupont"
-                className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none"
+                autoComplete="family-name"
+                className="w-full min-h-[48px] h-12 px-4 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none"
               />
             </div>
           </div>
 
-          {/* Adresse */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Adresse du chantier
-            </label>
-            <input
-              type="text"
-              value={form.client_adresse}
-              onChange={(e) => updateField('client_adresse', e.target.value)}
-              placeholder="34 rue Baptiste Marcet, 37000 Tours"
-              className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none"
-            />
-          </div>
-
-          {/* Téléphone */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Téléphone client
-            </label>
-            <input
-              type="tel"
-              value={form.client_telephone}
-              onChange={(e) => updateField('client_telephone', e.target.value)}
-              placeholder="06 12 34 56 78"
-              className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none"
-            />
-          </div>
-
-          {/* Email */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email client
-            </label>
-            <input
-              type="email"
-              value={form.client_email}
-              onChange={(e) => updateField('client_email', e.target.value)}
-              placeholder="client@email.fr"
-              className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none"
-            />
-          </div>
-
-          {/* Date de visite */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Date de la visite
-            </label>
-            <input
-              type="datetime-local"
-              value={form.date_visite}
-              onChange={(e) => updateField('date_visite', e.target.value)}
-              className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none"
-            />
-          </div>
+          {/* Adresse avec autocomplétion */}
+          <AddressAutocomplete
+            value={form.client_adresse}
+            onChange={(value) => updateField('client_adresse', value)}
+          />
 
           {/* Objet des travaux */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Objet des travaux
             </label>
             <textarea
@@ -321,13 +287,72 @@ export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
               onChange={(e) => updateField('objet_travaux', e.target.value)}
               placeholder="Ex: Ouverture mur porteur + fenêtre à boucher"
               rows={3}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none resize-none"
+              className="w-full min-h-[48px] px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none resize-none"
             />
+          </div>
+
+          {/* Téléphone */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Téléphone client
+            </label>
+            <input
+              type="tel"
+              inputMode="tel"
+              value={form.client_telephone}
+              onChange={(e) => updateField('client_telephone', e.target.value)}
+              placeholder="06 12 34 56 78"
+              autoComplete="tel"
+              className="w-full min-h-[48px] h-12 px-4 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none"
+            />
+          </div>
+
+          {/* Email */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Email client
+            </label>
+            <input
+              type="email"
+              inputMode="email"
+              value={form.client_email}
+              onChange={(e) => updateField('client_email', e.target.value)}
+              placeholder="client@email.fr"
+              autoComplete="email"
+              className="w-full min-h-[48px] h-12 px-4 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none"
+            />
+          </div>
+
+          {/* Date + Heure de visite */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Date et heure de la visite
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="date"
+                value={getDatePart(form.date_visite)}
+                onChange={(e) => {
+                  const time = getTimePart(form.date_visite);
+                  updateField('date_visite', `${e.target.value}T${time}`);
+                }}
+                className="w-full min-h-[48px] h-12 px-4 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none"
+              />
+              <input
+                type="time"
+                value={getTimePart(form.date_visite)}
+                onChange={(e) => {
+                  const date = getDatePart(form.date_visite);
+                  updateField('date_visite', `${date}T${e.target.value}`);
+                }}
+                className="w-full min-h-[48px] h-12 px-4 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none"
+              />
+            </div>
           </div>
 
           {/* Provenance */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Provenance
             </label>
             <input
@@ -335,19 +360,19 @@ export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
               value={form.provenance}
               onChange={(e) => updateField('provenance', e.target.value)}
               placeholder="Ex: BNI, Direct client, Recommandation"
-              className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none"
+              className="w-full min-h-[48px] h-12 px-4 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none"
             />
           </div>
 
           {/* Type de chantier */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Type de chantier
             </label>
             <select
               value={form.type_chantier}
               onChange={(e) => updateField('type_chantier', e.target.value)}
-              className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none bg-white"
+              className="w-full min-h-[48px] h-12 px-4 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none bg-white"
             >
               <option value="direct">Direct client</option>
               <option value="sous_traitance">Sous-traitance</option>

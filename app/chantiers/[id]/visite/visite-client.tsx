@@ -21,6 +21,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
   const [items, setItems] = useState<CaptureItemType[]>(initialItems);
   const [processing, setProcessing] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Compteurs
@@ -227,10 +228,17 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
               Terminer
             </button>
           </div>
-          {/* Compteur */}
-          <p className="text-xs text-blue-200 mt-1">
-            {items.length} élément{items.length !== 1 ? 's' : ''} — {photoCount} photo{photoCount !== 1 ? 's' : ''}, {vocalCount} vocal{vocalCount !== 1 ? 'aux' : ''}
-          </p>
+          {/* Compteur + indicateur enregistrement */}
+          {isRecording ? (
+            <div className="flex items-center gap-2 mt-1">
+              <span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
+              <span className="text-xs text-red-300 font-medium">Enregistrement en cours…</span>
+            </div>
+          ) : (
+            <p className="text-xs text-blue-200 mt-1">
+              {items.length} élément{items.length !== 1 ? 's' : ''} — {photoCount} photo{photoCount !== 1 ? 's' : ''}, {vocalCount} vocal{vocalCount !== 1 ? 'aux' : ''}
+            </p>
+          )}
         </div>
       </header>
 
@@ -238,14 +246,22 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
       <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 pb-28 overflow-y-auto">
         {items.length === 0 && !processing ? (
           <div className="text-center py-16">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-200 rounded-full mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-              </svg>
+            <div className="inline-flex items-center justify-center gap-3 mb-6">
+              <div className="w-14 h-14 bg-orange-100 rounded-full flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-[#F97316]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </svg>
+              </div>
+              <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-[#1E3A5F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
             </div>
-            <p className="text-gray-500 text-lg">Commencez la visite</p>
-            <p className="text-gray-400 text-sm mt-1">
-              Utilisez le micro pour parler ou l&apos;appareil photo
+            <p className="text-gray-700 text-lg font-medium">Commencez par prendre une photo ou faire une observation vocale</p>
+            <p className="text-gray-400 text-sm mt-2 max-w-xs mx-auto">
+              Alternez librement entre photos et vocaux, le rapport sera structuré automatiquement
             </p>
           </div>
         ) : (
@@ -278,6 +294,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
           <AudioRecorder
             onRecordingComplete={handleRecordingComplete}
             disabled={processing}
+            onRecordingChange={setIsRecording}
           />
           <PhotoCapture
             onPhotoTaken={handlePhotoTaken}
