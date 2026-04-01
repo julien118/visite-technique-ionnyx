@@ -11,15 +11,21 @@ export default async function ChantiersPage() {
     redirect('/login');
   }
 
-  // Récupérer les chantiers triés par date de visite décroissante
-  const { data: chantiers, error } = await supabase
-    .from('chantiers')
-    .select('*')
-    .order('date_visite', { ascending: false });
+  // Récupérer le profil utilisateur et les chantiers en parallèle
+  const [{ data: profile }, { data: chantiers, error }] = await Promise.all([
+    supabase.from('profiles').select('company_name').eq('id', user.id).single(),
+    supabase.from('chantiers').select('*').order('date_visite', { ascending: false }),
+  ]);
 
   if (error) {
     console.error('Erreur chargement chantiers:', error);
   }
 
-  return <ChantiersList chantiers={(chantiers as Chantier[]) || []} userEmail={user.email || ''} />;
+  return (
+    <ChantiersList
+      chantiers={(chantiers as Chantier[]) || []}
+      userEmail={user.email || ''}
+      companyName={profile?.company_name || ''}
+    />
+  );
 }

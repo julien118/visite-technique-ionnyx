@@ -8,9 +8,10 @@ import UserMenu from '@/components/UserMenu';
 interface ChantiersListProps {
   chantiers: Chantier[];
   userEmail: string;
+  companyName: string;
 }
 
-export default function ChantiersList({ chantiers, userEmail }: ChantiersListProps) {
+export default function ChantiersList({ chantiers, userEmail, companyName }: ChantiersListProps) {
   const router = useRouter();
 
   return (
@@ -19,8 +20,8 @@ export default function ChantiersList({ chantiers, userEmail }: ChantiersListPro
       <header className="bg-[#1E3A5F] text-white px-4 py-4 sticky top-0 z-10">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-bold">Mes Chantiers</h1>
-            <p className="text-sm text-blue-200 truncate max-w-[200px]">{userEmail}</p>
+            <h1 className="text-xl font-bold tracking-tight">{companyName || userEmail.split('@')[0]}</h1>
+            <p className="text-sm text-blue-200">Assistant de Visite</p>
           </div>
           <UserMenu />
         </div>
