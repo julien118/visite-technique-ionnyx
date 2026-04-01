@@ -43,3 +43,12 @@ input, select, textarea {
 .animate-fade-in {
   animation: fade-in 0.2s ease-out;
 }
+
+/* Masquer la scrollbar horizontale des onglets */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
