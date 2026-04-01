@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     const fileName = `rapport-visite-${chantier?.client_prenom || ''}-${chantier?.client_nom || ''}-${dateStr}.pdf`
       .replace(/\s+/g, '-');
 
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(new Uint8Array(pdfBuffer), {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${fileName}"`,
