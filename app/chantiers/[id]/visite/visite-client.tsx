@@ -365,9 +365,12 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden" style={{ background: 'linear-gradient(180deg, #F8FAFC 0%, #F0FDF4 100%)' }}>
-      {/* Header */}
-      <header className="bg-[#1A1A1A] text-white px-4 py-3 shrink-0 z-20">
+    <div
+      className="fixed inset-0 flex flex-col overflow-hidden"
+      style={{ background: 'linear-gradient(180deg, #F8FAFC 0%, #F0FDF4 100%)' }}
+    >
+      {/* HEADER — ne scrolle jamais */}
+      <header className="shrink-0 bg-[#1A1A1A] text-white px-4 py-3 z-50">
         <div className="max-w-lg mx-auto">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
@@ -407,7 +410,13 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
       </header>
 
       {/* Timeline */}
-      <div ref={mainRef} className="flex-1 max-w-lg mx-auto w-full px-4 py-4 pb-36 overflow-y-auto">
+      {/* FEED — seule zone scrollable */}
+      <div
+        ref={mainRef}
+        className="flex-1 overflow-y-auto overflow-x-hidden"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
+        <div className="max-w-lg mx-auto w-full px-4 py-4 pb-4">
         {items.length === 0 && !processing ? (
           <div className="text-center py-16">
             <div className="inline-flex items-center justify-center gap-3 mb-6">
@@ -465,14 +474,15 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
           </div>
         )}
 
+        </div>
       </div>
 
-      {/* Barre d'action */}
+      {/* BARRE ACTIONS — ne scrolle jamais */}
       <div
-        className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md px-4 py-4 z-20"
+        className="shrink-0 bg-white px-4 py-3 z-50"
         style={{
           boxShadow: '0 -4px 20px rgba(0,0,0,0.06)',
-          paddingBottom: 'max(16px, env(safe-area-inset-bottom))',
+          paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
         }}
       >
         <div className="max-w-lg mx-auto">
