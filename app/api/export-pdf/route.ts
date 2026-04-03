@@ -86,17 +86,58 @@ function stripBold(text: string): { text: string; boldRanges: { start: number; e
   return { text: clean, boldRanges };
 }
 
-async function fetchImageAsBase64(url: string): Promise<string | null> {
+interface FetchedImage {
+  dataUri: string;
+  width: number;
+  height: number;
+}
+
+async function fetchImageAsBase64(url: string): Promise<FetchedImage | null> {
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
     const buffer = await res.arrayBuffer();
     const base64 = Buffer.from(buffer).toString('base64');
     const contentType = res.headers.get('content-type') || 'image/jpeg';
-    return `data:${contentType};base64,${base64}`;
+    const dataUri = `data:${contentType};base64,${base64}`;
+
+    // Extraire les dimensions depuis les données JPEG/PNG
+    const uint8 = new Uint8Array(buffer);
+    const dims = getImageDimensions(uint8);
+
+    return { dataUri, width: dims.width, height: dims.height };
   } catch {
     return null;
   }
+}
+
+// Extraire largeur/hauteur d'un JPEG ou PNG depuis les octets bruts
+function getImageDimensions(data: Uint8Array): { width: number; height: number } {
+  // PNG : octets 16-23 contiennent largeur (4 octets) et hauteur (4 octets)
+  if (data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4E && data[3] === 0x47) {
+    const width = (data[16] << 24) | (data[17] << 16) | (data[18] << 8) | data[19];
+    const height = (data[20] << 24) | (data[21] << 16) | (data[22] << 8) | data[23];
+    return { width, height };
+  }
+
+  // JPEG : chercher le marqueur SOF (0xFFC0, 0xFFC1, 0xFFC2)
+  if (data[0] === 0xFF && data[1] === 0xD8) {
+    let offset = 2;
+    while (offset < data.length - 8) {
+      if (data[offset] !== 0xFF) { offset++; continue; }
+      const marker = data[offset + 1];
+      if (marker >= 0xC0 && marker <= 0xC3) {
+        const height = (data[offset + 5] << 8) | data[offset + 6];
+        const width = (data[offset + 7] << 8) | data[offset + 8];
+        return { width, height };
+      }
+      const segmentLength = (data[offset + 2] << 8) | data[offset + 3];
+      offset += 2 + segmentLength;
+    }
+  }
+
+  // Fallback : ratio 4:3 paysage
+  return { width: 1920, height: 1440 };
 }
 
 async function buildPdf(contenu: RapportContenu): Promise<Buffer> {
@@ -194,13 +235,34 @@ async function buildPdf(contenu: RapportContenu): Promise<Buffer> {
 
     // Photos intégrées
     for (const photo of obs.photos) {
-      const imgData = await fetchImageAsBase64(photo.url);
-      if (imgData) {
-        checkPage(80);
+      const imgResult = await fetchImageAsBase64(photo.url);
+      if (imgResult) {
         try {
-          const imgWidth = contentWidth;
-          const imgHeight = 70;
-          doc.addImage(imgData, 'JPEG', margin, y, imgWidth, imgHeight);
+          // Calculer les dimensions proportionnelles
+          const maxImgWidth = contentWidth * 0.8; // 80% de la largeur pour centrer
+          const maxImgHeight = 90; // mm max
+          const ratio = imgResult.width / imgResult.height;
+
+          let imgWidth = maxImgWidth;
+          let imgHeight = imgWidth / ratio;
+
+          // Si trop haut, réduire par la hauteur
+          if (imgHeight > maxImgHeight) {
+            imgHeight = maxImgHeight;
+            imgWidth = imgHeight * ratio;
+          }
+
+          // Si plus large que le max, réduire par la largeur
+          if (imgWidth > maxImgWidth) {
+            imgWidth = maxImgWidth;
+            imgHeight = imgWidth / ratio;
+          }
+
+          // Centrer horizontalement
+          const imgX = margin + (contentWidth - imgWidth) / 2;
+
+          checkPage(imgHeight + 10);
+          doc.addImage(imgResult.dataUri, 'JPEG', imgX, y, imgWidth, imgHeight);
           y += imgHeight + 2;
 
           if (photo.legende) {

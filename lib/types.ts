@@ -29,6 +29,7 @@ export interface CaptureItem {
   audio_url: string | null;
   transcription: string | null;
   photo_url: string | null;
+  linked_photo_id: string | null;
   created_at: string;
 }
 

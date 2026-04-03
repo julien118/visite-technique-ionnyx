@@ -15,6 +15,49 @@ interface VisiteClientProps {
   userId: string;
 }
 
+// Grouper les items : photo + vocal lié = un seul groupe
+interface DisplayGroup {
+  photo: CaptureItemType;
+  linkedVocal: CaptureItemType | null;
+}
+
+function buildDisplayGroups(items: CaptureItemType[]): (CaptureItemType | DisplayGroup)[] {
+  // Trouver les IDs des vocaux liés à une photo
+  const linkedVocalIds = new Set<string>();
+  const photoToVocal = new Map<string, CaptureItemType>();
+
+  for (const item of items) {
+    if (item.type === 'vocal' && item.linked_photo_id) {
+      linkedVocalIds.add(item.id);
+      photoToVocal.set(item.linked_photo_id, item);
+    }
+  }
+
+  const result: (CaptureItemType | DisplayGroup)[] = [];
+
+  for (const item of items) {
+    // Skip les vocaux liés (ils seront affichés dans la carte photo)
+    if (linkedVocalIds.has(item.id)) continue;
+
+    if (item.type === 'photo' && photoToVocal.has(item.id)) {
+      // Photo avec vocal lié → carte combinée
+      result.push({
+        photo: item,
+        linkedVocal: photoToVocal.get(item.id)!,
+      });
+    } else {
+      // Item solo (photo sans description ou vocal indépendant)
+      result.push(item);
+    }
+  }
+
+  return result;
+}
+
+function isDisplayGroup(item: CaptureItemType | DisplayGroup): item is DisplayGroup {
+  return 'photo' in item && 'linkedVocal' in item;
+}
+
 export default function VisiteClient({ chantier, initialItems, userId }: VisiteClientProps) {
   const router = useRouter();
   const supabase = createClient();
@@ -24,12 +67,25 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
   const [isRecording, setIsRecording] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // État pour la liaison photo/vocal
+  const [lastPhotoItem, setLastPhotoItem] = useState<CaptureItemType | null>(null);
+  const [lastPhotoTimestamp, setLastPhotoTimestamp] = useState<number>(0);
+  const [describeCountdown, setDescribeCountdown] = useState(0);
+  const describeTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Le bouton "Décrire cette photo" est visible si countdown > 0
+  const showDescribeButton = describeCountdown > 0 && !isRecording && !processing;
+
   // Compteurs
   const photoCount = items.filter((i) => i.type === 'photo').length;
   const vocalCount = items.filter((i) => i.type === 'vocal').length;
 
   // Prochaine position dans le fil
   const nextPosition = items.length > 0 ? Math.max(...items.map((i) => i.position)) + 1 : 1;
+
+  // Groupes pour l'affichage
+  const displayGroups = buildDisplayGroups(items);
 
   // Scroll vers le bas quand un nouvel élément est ajouté
   const scrollToBottom = useCallback(() => {
@@ -42,9 +98,71 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
     scrollToBottom();
   }, [items.length, scrollToBottom]);
 
+  // Cleanup timers au démontage
+  useEffect(() => {
+    return () => {
+      if (describeTimerRef.current) clearTimeout(describeTimerRef.current);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    };
+  }, []);
+
+  // Démarrer le compte à rebours de 8s après une photo
+  function startDescribeCountdown(photoItem: CaptureItemType) {
+    // Nettoyer les timers précédents
+    if (describeTimerRef.current) clearTimeout(describeTimerRef.current);
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+
+    setLastPhotoItem(photoItem);
+    setLastPhotoTimestamp(Date.now());
+    setDescribeCountdown(8);
+
+    // Décompte chaque seconde
+    countdownIntervalRef.current = setInterval(() => {
+      setDescribeCountdown((prev) => {
+        if (prev <= 1) {
+          if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    // Arrêter après 8s
+    describeTimerRef.current = setTimeout(() => {
+      setDescribeCountdown(0);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    }, 8000);
+  }
+
+  // Annuler le mode description (quand l'artisan prend une nouvelle photo)
+  function cancelDescribeMode() {
+    if (describeTimerRef.current) clearTimeout(describeTimerRef.current);
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    setDescribeCountdown(0);
+    setLastPhotoItem(null);
+    setLastPhotoTimestamp(0);
+  }
+
+  // Vérifier si le vocal doit être lié à la dernière photo
+  function shouldLinkToPhoto(): CaptureItemType | null {
+    if (!lastPhotoItem) return null;
+    const elapsed = Date.now() - lastPhotoTimestamp;
+    // Lier si dans les 30 secondes ou si le bouton "Décrire" est encore visible
+    if (elapsed <= 30000 || describeCountdown > 0) {
+      return lastPhotoItem;
+    }
+    return null;
+  }
+
   // === GESTION VOCAL ===
   async function handleRecordingComplete(audioBlob: Blob) {
     setProcessing(true);
+
+    // Déterminer si ce vocal est lié à une photo
+    const linkedPhoto = shouldLinkToPhoto();
+
+    // Annuler le mode description
+    cancelDescribeMode();
 
     try {
       // 1. Upload audio vers Supabase Storage
@@ -63,15 +181,22 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
       const audioUrl = urlData?.signedUrl || '';
 
       // 2. Créer le capture_item avec transcription null (en attente)
+      const insertData: Record<string, unknown> = {
+        chantier_id: chantier.id,
+        type: 'vocal',
+        position: nextPosition,
+        audio_url: audioUrl,
+        transcription: null,
+      };
+
+      // Lier à la photo si applicable
+      if (linkedPhoto) {
+        insertData.linked_photo_id = linkedPhoto.id;
+      }
+
       const { data: newItem, error: insertError } = await supabase
         .from('capture_items')
-        .insert({
-          chantier_id: chantier.id,
-          type: 'vocal',
-          position: nextPosition,
-          audio_url: audioUrl,
-          transcription: null,
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -118,6 +243,9 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
   async function handlePhotoTaken(file: File) {
     setProcessing(true);
 
+    // Si une photo précédente était en attente de description, elle reste seule
+    cancelDescribeMode();
+
     try {
       // 1. Compresser la photo côté client
       const compressedBlob = await compressImage(file);
@@ -152,7 +280,11 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
       if (insertError) throw insertError;
 
       // 4. Ajouter au fil
-      setItems((prev) => [...prev, newItem as CaptureItemType]);
+      const photoItem = newItem as CaptureItemType;
+      setItems((prev) => [...prev, photoItem]);
+
+      // 5. Démarrer le compte à rebours pour "Décrire cette photo"
+      startDescribeCountdown(photoItem);
     } catch (err) {
       console.error('Erreur photo:', err);
       alert('Erreur lors de la prise de photo. Réessayez.');
@@ -175,10 +307,47 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
 
       if (error) throw error;
 
-      // Supprimer du fil local
-      setItems((prev) => prev.filter((i) => i.id !== itemId));
+      // Si c'est une photo qui est supprimée, les vocaux liés deviennent indépendants
+      // grâce à ON DELETE SET NULL en base. On met à jour le state local aussi.
+      setItems((prev) =>
+        prev
+          .filter((i) => i.id !== itemId)
+          .map((i) =>
+            i.linked_photo_id === itemId ? { ...i, linked_photo_id: null } : i
+          )
+      );
+
+      // Si on supprime la photo en attente de description, annuler le mode
+      if (lastPhotoItem?.id === itemId) {
+        cancelDescribeMode();
+      }
     } catch (err) {
       console.error('Erreur suppression:', err);
+      alert('Erreur lors de la suppression.');
+    }
+  }
+
+  // === SUPPRESSION D'UN GROUPE (photo + vocal lié) ===
+  async function handleDeleteGroup(photoId: string, vocalId: string) {
+    try {
+      // Supprimer les deux items
+      const { error: err1 } = await supabase
+        .from('capture_items')
+        .delete()
+        .eq('id', vocalId);
+
+      if (err1) throw err1;
+
+      const { error: err2 } = await supabase
+        .from('capture_items')
+        .delete()
+        .eq('id', photoId);
+
+      if (err2) throw err2;
+
+      setItems((prev) => prev.filter((i) => i.id !== photoId && i.id !== vocalId));
+    } catch (err) {
+      console.error('Erreur suppression groupe:', err);
       alert('Erreur lors de la suppression.');
     }
   }
@@ -266,14 +435,31 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
           </div>
         ) : (
           <div className="space-y-3">
-            {items.map((item) => (
-              <CaptureItemComponent
-                key={item.id}
-                item={item}
-                onDelete={handleDelete}
-                onTranscriptionUpdate={handleTranscriptionUpdate}
-              />
-            ))}
+            {displayGroups.map((group) => {
+              if (isDisplayGroup(group)) {
+                // Carte combinée photo + vocal
+                return (
+                  <CaptureItemComponent
+                    key={group.photo.id}
+                    item={group.photo}
+                    linkedVocal={group.linkedVocal}
+                    onDelete={handleDelete}
+                    onDeleteGroup={handleDeleteGroup}
+                    onTranscriptionUpdate={handleTranscriptionUpdate}
+                  />
+                );
+              } else {
+                // Carte solo
+                return (
+                  <CaptureItemComponent
+                    key={group.id}
+                    item={group}
+                    onDelete={handleDelete}
+                    onTranscriptionUpdate={handleTranscriptionUpdate}
+                  />
+                );
+              }
+            })}
           </div>
         )}
 
@@ -290,16 +476,45 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
 
       {/* Barre d'action fixe en bas */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3 z-20">
-        <div className="max-w-lg mx-auto flex gap-4">
-          <AudioRecorder
-            onRecordingComplete={handleRecordingComplete}
-            disabled={processing}
-            onRecordingChange={setIsRecording}
-          />
-          <PhotoCapture
-            onPhotoTaken={handlePhotoTaken}
-            disabled={processing}
-          />
+        <div className="max-w-lg mx-auto">
+          {showDescribeButton ? (
+            // Mode "Décrire cette photo" — bouton vert pleine largeur
+            <div className="space-y-2">
+              <AudioRecorder
+                onRecordingComplete={handleRecordingComplete}
+                disabled={processing}
+                onRecordingChange={setIsRecording}
+                variant="describe"
+                countdown={describeCountdown}
+              />
+              <div className="flex gap-3">
+                <button
+                  onClick={cancelDescribeMode}
+                  className="flex-1 h-12 bg-gray-100 text-gray-600 rounded-xl font-medium text-sm active:bg-gray-200 transition-colors"
+                >
+                  Passer
+                </button>
+                <PhotoCapture
+                  onPhotoTaken={handlePhotoTaken}
+                  disabled={processing}
+                  compact
+                />
+              </div>
+            </div>
+          ) : (
+            // Mode normal — Parler + Photo
+            <div className="flex gap-4">
+              <AudioRecorder
+                onRecordingComplete={handleRecordingComplete}
+                disabled={processing}
+                onRecordingChange={setIsRecording}
+              />
+              <PhotoCapture
+                onPhotoTaken={handlePhotoTaken}
+                disabled={processing}
+              />
+            </div>
+          )}
         </div>
       </div>
 

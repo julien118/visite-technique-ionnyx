@@ -301,8 +301,7 @@ function ObservationBlock({
               <img
                 src={photo.url}
                 alt={photo.legende}
-                className="w-full rounded-lg object-cover"
-                style={{ maxHeight: '400px' }}
+                className="max-w-full max-h-[420px] w-auto h-auto object-contain block mx-auto rounded-lg"
               />
               {photo.legende && (
                 <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">

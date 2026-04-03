@@ -12,10 +12,12 @@ Ta mission :
 - Produire un rapport structuré en JSON
 
 Règles de corrélation photo-observation :
+- Quand un élément est marqué [LIÉ À PHOTO #X], cela signifie que l'artisan a explicitement lié cette observation vocale à cette photo. Dans ce cas, tu DOIS regrouper la photo et l'observation dans la même section du rapport. La légende de la photo doit être extraite de cette observation vocale liée.
 - VOCAL puis PHOTO(s) → les photos illustrent l'observation vocale
 - PHOTO(s) puis VOCAL → le vocal décrit ce qui a été photographié
 - Plusieurs PHOTOS entre deux VOCAUX → rattacher au vocal sémantiquement le plus pertinent
 - Utiliser le contenu sémantique pour affiner (ex: le vocal mentionne "fenêtre" + la photo montre une fenêtre = corrélation forte)
+- Les liaisons explicites ([LIÉ À PHOTO #X]) ont TOUJOURS priorité sur l'heuristique de proximité
 
 Règles de rédaction :
 - Reformuler les observations de manière professionnelle et structurée, sans perdre les détails techniques
@@ -85,6 +87,8 @@ export function buildUserPrompt(
     position: number;
     transcription: string | null;
     photo_url: string | null;
+    linked_photo_id?: string | null;
+    id?: string;
   }[]
 ): string {
   let prompt = `INFORMATIONS CLIENT :
@@ -101,9 +105,24 @@ export function buildUserPrompt(
 FLUX CHRONOLOGIQUE DE LA VISITE :
 `;
 
+  // Construire un map id → position pour retrouver la photo liée
+  const idToPosition = new Map<string, number>();
+  for (const item of items) {
+    if (item.id) {
+      idToPosition.set(item.id, item.position);
+    }
+  }
+
   for (const item of items) {
     if (item.type === 'vocal' && item.transcription) {
-      prompt += `VOCAL #${item.position} (position ${item.position}) : "${item.transcription}"\n`;
+      let linkInfo = '';
+      if (item.linked_photo_id) {
+        const linkedPosition = idToPosition.get(item.linked_photo_id);
+        if (linkedPosition !== undefined) {
+          linkInfo = ` [LIÉ À PHOTO #${linkedPosition}]`;
+        }
+      }
+      prompt += `VOCAL #${item.position} (position ${item.position})${linkInfo} : "${item.transcription}"\n`;
     } else if (item.type === 'photo' && item.photo_url) {
       prompt += `PHOTO #${item.position} (position ${item.position}) : ${item.photo_url}\n`;
     }

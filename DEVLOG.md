@@ -54,7 +54,52 @@
 
 ---
 
-## 01/04/2026 — Session 4 : Documentation projet
-- Création du fichier `CLAUDE.md` — mémoire persistante du projet (état, décisions, leçons, prochaines étapes)
-- Création du fichier `DEVLOG.md` — journal de bord chronologique
-- Exploration complète du projet pour documenter l'état actuel
+## 01/04/2026 — Session 4 : Déploiement + Design + Features
+
+### Déploiement GitHub & Vercel
+- Push du projet vers GitHub (`julien118/visite-technique-ionnyx`)
+- Configuration git : email `julien@ionnyx.fr` pour compatibilité Vercel Hobby
+- Rebase de tous les commits avec le bon auteur + force push
+- Bug fix build Vercel : `Buffer` → `new Uint8Array()` dans `/api/export-pdf`
+- Déploiement réussi sur Vercel (`visite-technique-mtc37.vercel.app`)
+
+### Header dynamique
+- Nouvelle table `profiles` (migration `002_profiles_table.sql`) avec `company_name`
+- Trigger auto-création de profil à l'inscription (`handle_new_user`)
+- RLS sur la table profiles
+- Header affiche `company_name` ("MTC37") au lieu de "Mes Chantiers" + email
+- Sous-titre "Assistant de Visite"
+
+### Suppression de chantier
+- API route `DELETE /api/chantiers/[id]` avec nettoyage des fichiers Storage (audio + photos)
+- Swipe gauche sur carte mobile → zone rouge avec icône poubelle
+- Bouton poubelle discret sur desktop (gris → rouge au hover)
+- Bouton "Supprimer ce chantier" en bas de la fiche chantier (texte rouge discret)
+- Modale de confirmation réutilisable (`DeleteChantierModal.tsx`)
+- Cascade DB via FK + RLS empêche suppression des chantiers d'autres users
+
+### Filtres et recherche
+- Onglets de filtre sticky : Tous | Planifiés | En cours | Finis | Rapports (avec compteurs)
+- Barre de recherche temps réel sur nom/adresse/objet avec bouton X pour effacer
+- Clavier mobile se ferme automatiquement au scroll de la liste
+- Tri intelligent : En cours et Planifiés en premier (action requise), puis Terminés et Rapports
+- Classe CSS `scrollbar-hide` pour masquer la scrollbar des onglets
+
+### Refonte design liste des chantiers (3 itérations)
+- Header MTC37 en `text-2xl bold` avec dégradé bleu (`from-[#1E3A5F] to-[#162d4a]`)
+- Badges de statut colorés avec icônes :
+  - Planifié → `bg-blue-100 text-blue-700` + icône calendrier
+  - En cours → `bg-orange-100 text-orange-700` + icône micro
+  - Terminé → `bg-yellow-100 text-yellow-700` + icône horloge
+  - Rapport généré → `bg-green-100 text-green-700` + icône check
+- Bande colorée `border-l-4` à gauche de chaque carte selon statut
+- Cartes aérées `p-4` avec typographie hiérarchisée
+- "Objet non renseigné" masqué (plus de placeholder inutile)
+- Barre de recherche `bg-gray-50 border rounded-xl h-12` style iPhone
+- Bouton "Nouvelle visite" avec `shadow-lg shadow-orange-200` + safe-area iPhone
+- Onglets raccourcis ("Finis" au lieu de "Terminés") + padding de fin pour visibilité
+- Espacement : `gap-3` entre cartes, 16px entre onglets/recherche/liste
+
+### Documentation
+- Création `CLAUDE.md` (mémoire persistante du projet)
+- Création `DEVLOG.md` (journal de bord chronologique)
