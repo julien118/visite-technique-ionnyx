@@ -50,6 +50,33 @@ function isDisplayGroup(item: CaptureItemType | DisplayGroup): item is DisplayGr
   return 'photo' in item && 'linkedVocal' in item;
 }
 
+// Upload avec retry (3 tentatives, backoff exponentiel)
+async function uploadWithRetry(
+  supabase: ReturnType<typeof createClient>,
+  bucket: string,
+  fileName: string,
+  blob: Blob,
+  contentType: string,
+  maxRetries = 3
+): Promise<void> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const { error } = await supabase.storage
+      .from(bucket)
+      .upload(fileName, blob, { contentType });
+
+    if (!error) return;
+
+    console.warn(`Upload ${bucket}/${fileName} — tentative ${attempt + 1}/${maxRetries} échouée:`, error.message);
+
+    if (attempt < maxRetries - 1) {
+      const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+      await new Promise((r) => setTimeout(r, delay));
+    } else {
+      throw error;
+    }
+  }
+}
+
 export default function VisiteClient({ chantier, initialItems, userId }: VisiteClientProps) {
   const router = useRouter();
   const supabase = createClient();
@@ -58,6 +85,8 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  const isNearBottomRef = useRef(true);
 
   const [lastPhotoItem, setLastPhotoItem] = useState<CaptureItemType | null>(null);
   const [lastPhotoTimestamp, setLastPhotoTimestamp] = useState<number>(0);
@@ -73,11 +102,29 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
   const displayGroups = buildDisplayGroups(items);
 
   const scrollToBottom = useCallback(() => {
-    setTimeout(() => {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
+    if (!isNearBottomRef.current) return;
+    // requestAnimationFrame pour s'assurer que le DOM est à jour
+    requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    });
   }, []);
 
+  // Détecter si l'utilisateur est près du bas
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+
+    function handleScroll() {
+      if (!el) return;
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      isNearBottomRef.current = distanceFromBottom < 150;
+    }
+
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Auto-scroll quand un nouvel item est ajouté
   useEffect(() => {
     scrollToBottom();
   }, [items.length, scrollToBottom]);
@@ -95,7 +142,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
 
     setLastPhotoItem(photoItem);
     setLastPhotoTimestamp(Date.now());
-    setDescribeCountdown(8);
+    setDescribeCountdown(10);
 
     countdownIntervalRef.current = setInterval(() => {
       setDescribeCountdown((prev) => {
@@ -110,7 +157,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
     describeTimerRef.current = setTimeout(() => {
       setDescribeCountdown(0);
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    }, 8000);
+    }, 10000);
   }
 
   function cancelDescribeMode() {
@@ -137,11 +184,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
 
     try {
       const fileName = `${userId}/${chantier.id}/${Date.now()}.webm`;
-      const { error: uploadError } = await supabase.storage
-        .from('audio')
-        .upload(fileName, audioBlob, { contentType: 'audio/webm' });
-
-      if (uploadError) throw uploadError;
+      await uploadWithRetry(supabase, 'audio', fileName, audioBlob, 'audio/webm');
 
       const { data: urlData } = await supabase.storage
         .from('audio')
@@ -171,6 +214,9 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
 
       const captureItem = newItem as CaptureItemType;
       setItems((prev) => [...prev, captureItem]);
+
+      // Forcer le scroll vers le bas après ajout confirmé
+      isNearBottomRef.current = true;
 
       const formData = new FormData();
       formData.append('file', audioBlob, 'audio.webm');
@@ -210,11 +256,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
       const compressedBlob = await compressImage(file);
 
       const fileName = `${userId}/${chantier.id}/${Date.now()}.jpg`;
-      const { error: uploadError } = await supabase.storage
-        .from('photos')
-        .upload(fileName, compressedBlob, { contentType: 'image/jpeg' });
-
-      if (uploadError) throw uploadError;
+      await uploadWithRetry(supabase, 'photos', fileName, compressedBlob, 'image/jpeg');
 
       const { data: urlData } = supabase.storage
         .from('photos')
@@ -237,6 +279,9 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
 
       const photoItem = newItem as CaptureItemType;
       setItems((prev) => [...prev, photoItem]);
+
+      // Forcer le scroll vers le bas après ajout confirmé
+      isNearBottomRef.current = true;
 
       startDescribeCountdown(photoItem);
     } catch (err) {
@@ -356,7 +401,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
       </header>
 
       {/* Timeline */}
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 pb-28 overflow-y-auto">
+      <main ref={mainRef} className="flex-1 max-w-lg mx-auto w-full px-4 py-4 pb-28 overflow-y-auto">
         {items.length === 0 && !processing ? (
           <div className="text-center py-16">
             <div className="inline-flex items-center justify-center gap-3 mb-6">

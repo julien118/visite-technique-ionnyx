@@ -37,6 +37,8 @@ Règles supplémentaires OBLIGATOIRES :
 
 4. DONNÉES CLIENT : Reprends EXACTEMENT les informations client fournies dans la section "INFORMATIONS CLIENT" ci-dessous. Ne modifie PAS le téléphone, l'email, l'adresse ou toute autre donnée — recopie-les à l'identique dans le JSON de sortie.
 
+5. AUCUNE PHOTO NE DOIT ÊTRE PERDUE : Chaque URL de photo fournie dans le flux chronologique DOIT apparaître EXACTEMENT UNE FOIS dans le JSON de sortie, dans le tableau "photos" d'une observation. Vérifie que le nombre total de photos dans ta réponse correspond au nombre de PHOTO dans le flux. Si une photo n'a pas de vocal associé, rattache-la à l'observation la plus proche ou crée une observation dédiée pour elle. Ne jamais ignorer ou omettre une photo.
+
 Format de sortie : JSON strict, conforme au schéma fourni. Ne rien ajouter en dehors du JSON.
 
 Le JSON doit respecter ce schéma exact :
