@@ -44,17 +44,22 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasDr
   const supabase = createClient();
   const [rapport, setRapport] = useState(initialRapport);
   const [generating, setGenerating] = useState(false);
-  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
   const stepIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasStartedRef = useRef(false);
 
-  // Share sheet + Drive
-  const [showShareSheet, setShowShareSheet] = useState(false);
+  // Drive
   const [showDriveModal, setShowDriveModal] = useState(false);
   const [driveStatus, setDriveStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [driveLink, setDriveLink] = useState('');
+
+  // PDF preview
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState('');
+  const [loadingPdf, setLoadingPdf] = useState(false);
+
+  // Toast
   const [shareToast, setShareToast] = useState('');
 
   const contenu = rapport?.contenu_json as RapportContenu | null;
@@ -78,6 +83,11 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasDr
     }
     return () => { if (stepIntervalRef.current) clearInterval(stepIntervalRef.current); };
   }, [generating]);
+
+  // Cleanup blob URL
+  useEffect(() => {
+    return () => { if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl); };
+  }, [pdfBlobUrl]);
 
   async function handleGenerate() {
     setGenerating(true);
@@ -117,8 +127,9 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasDr
     }
   }
 
-  async function handleDownloadPdf() {
-    setDownloading(true);
+  // === PDF preview ===
+  async function handlePreviewPdf() {
+    setLoadingPdf(true);
     try {
       const response = await fetch('/api/export-pdf', {
         method: 'POST',
@@ -127,27 +138,39 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasDr
       });
       if (!response.ok) throw new Error('Erreur export PDF');
       const blob = await response.blob();
-      const dateStr = new Date(chantier.date_visite).toISOString().slice(0, 10);
-      const fileName = `rapport-visite-${chantier.client_prenom}-${chantier.client_nom}-${dateStr}.pdf`.replace(/\s+/g, '-');
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setPdfBlobUrl(url);
+      setShowPdfPreview(true);
     } catch (err) {
       console.error('Erreur PDF:', err);
-      setError('Erreur lors de l\'export PDF');
+      setError('Erreur lors de la génération du PDF');
     } finally {
-      setDownloading(false);
+      setLoadingPdf(false);
     }
   }
 
-  // Partage natif
+  function handleDownloadFromPreview() {
+    if (!pdfBlobUrl) return;
+    const dateStr = new Date(chantier.date_visite).toISOString().slice(0, 10);
+    const fileName = `rapport-visite-${chantier.client_prenom}-${chantier.client_nom}-${dateStr}.pdf`.replace(/\s+/g, '-');
+    const a = document.createElement('a');
+    a.href = pdfBlobUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  function closePdfPreview() {
+    setShowPdfPreview(false);
+    if (pdfBlobUrl) {
+      URL.revokeObjectURL(pdfBlobUrl);
+      setPdfBlobUrl('');
+    }
+  }
+
+  // === Partage natif ===
   async function handleNativeShare() {
-    setShowShareSheet(false);
     const shareUrl = window.location.href;
     const title = `Rapport de visite — ${chantier.client_prenom} ${chantier.client_nom}`;
     if (navigator.share) {
@@ -159,9 +182,10 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasDr
     }
   }
 
-  // Google Drive
+  // === Google Drive ===
   function handleDriveClick() {
-    setShowShareSheet(false);
+    if (driveStatus === 'success') return; // Déjà envoyé
+    if (driveStatus === 'error') { uploadToDrive(); return; } // Retry
     if (hasDriveConnected) {
       uploadToDrive();
     } else {
@@ -200,25 +224,64 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasDr
     }
   }
 
+  // === Drive button content ===
+  function renderDriveButton() {
+    const baseClass = 'w-full h-14 rounded-xl font-semibold text-base flex items-center justify-center gap-3 active:scale-[0.97] transition-all';
+
+    if (driveStatus === 'uploading') {
+      return (
+        <button disabled className={`${baseClass} btn-primary opacity-80`}>
+          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          Envoi en cours…
+        </button>
+      );
+    }
+    if (driveStatus === 'success') {
+      return (
+        <div>
+          <button disabled className={`${baseClass} bg-emerald-700 text-white`}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+            Enregistré dans Drive
+          </button>
+          {driveLink && (
+            <a href={driveLink} target="_blank" rel="noopener noreferrer" className="block text-center text-sm text-emerald-600 font-medium mt-2 active:text-emerald-700">
+              Ouvrir dans Drive →
+            </a>
+          )}
+        </div>
+      );
+    }
+    if (driveStatus === 'error') {
+      return (
+        <button onClick={handleDriveClick} className={`${baseClass} bg-red-500 text-white`}>
+          <span>⚠️</span>
+          Erreur — Réessayer
+        </button>
+      );
+    }
+    // idle
+    return (
+      <button onClick={handleDriveClick} className={`${baseClass} btn-primary`} style={{ boxShadow: '0 4px 15px rgba(16,185,129,0.3)' }}>
+        <span className="text-xl">☁️</span>
+        Envoyer vers Google Drive
+      </button>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
       {/* Header */}
       <header className="bg-[#1A1A1A] text-white px-4 py-4 sticky top-0 z-10">
         <div className="max-w-lg mx-auto flex items-center gap-3">
-          <button
-            onClick={() => router.push(`/chantiers/${chantier.id}`)}
-            className="flex items-center justify-center w-10 h-10 -ml-2 rounded-lg active:bg-white/10 transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
+          <button onClick={() => router.push(`/chantiers/${chantier.id}`)} className="flex items-center justify-center w-10 h-10 -ml-2 rounded-lg active:bg-white/10 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
           </button>
           <h1 className="text-lg font-semibold flex-1 text-center">Rapport</h1>
           <div className="w-10" />
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 py-4 pb-32">
+      <main className="max-w-lg mx-auto px-4 py-4 pb-[220px]">
         {/* Loader */}
         {generating && (
           <div className="py-12">
@@ -263,9 +326,7 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasDr
         {error && !generating && (
           <div className="py-12 text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-red-50 rounded-full mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
             </div>
             <p className="text-gray-900 text-lg font-medium mb-1">Erreur de génération</p>
             <p className="text-gray-400 text-sm mb-6">{error}</p>
@@ -279,77 +340,77 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasDr
         )}
       </main>
 
-      {/* Barre d'actions */}
+      {/* ===== NOUVELLE BARRE D'ACTIONS ===== */}
       {contenu && !generating && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-gray-100 px-4 py-3 z-20" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
-          <div className="max-w-lg mx-auto flex gap-2">
-            <button onClick={handleDownloadPdf} disabled={downloading} className="flex-1 h-12 btn-secondary font-semibold rounded-xl active:scale-[0.97] disabled:opacity-50 transition-all flex items-center justify-center gap-2 text-sm">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              {downloading ? 'Export…' : 'PDF'}
+        <div
+          className="fixed bottom-0 left-0 right-0 bg-white z-20 flex flex-col gap-2 px-4 pt-3"
+          style={{
+            boxShadow: '0 -4px 20px rgba(0,0,0,0.06)',
+            paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
+          }}
+        >
+          <div className="max-w-lg mx-auto w-full flex flex-col gap-2">
+            {/* Niveau 1 — Google Drive (principal) */}
+            {renderDriveButton()}
+
+            {/* Niveau 2 — Prévisualiser le PDF */}
+            <button
+              onClick={handlePreviewPdf}
+              disabled={loadingPdf}
+              className="w-full h-12 btn-secondary rounded-xl font-medium text-sm flex items-center justify-center gap-2 active:scale-[0.97] disabled:opacity-50 transition-all"
+            >
+              {loadingPdf ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Génération…
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  Prévisualiser le PDF
+                </>
+              )}
             </button>
-            {/* Bouton partage → ouvre le bottom sheet */}
-            <button onClick={() => setShowShareSheet(true)} className="h-12 w-12 btn-tertiary rounded-xl flex items-center justify-center transition-all">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-              </svg>
-            </button>
-            <button onClick={handleGenerate} className="h-12 w-12 btn-tertiary rounded-xl flex items-center justify-center transition-all">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </button>
+
+            {/* Niveau 3 — Partager + Régénérer */}
+            <div className="flex gap-2">
+              <button onClick={handleNativeShare} className="flex-1 h-12 btn-tertiary rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all">
+                <span className="text-base">📤</span>
+                Partager
+              </button>
+              <button onClick={handleGenerate} className="flex-1 h-12 btn-tertiary rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all">
+                <span className="text-base">🔄</span>
+                Régénérer
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Bottom sheet partage */}
-      {showShareSheet && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setShowShareSheet(false)}>
-          <div className="absolute inset-0 bg-black/40" />
-          <div className="relative bg-white w-full max-w-lg rounded-t-2xl shadow-2xl animate-slide-up" style={{ paddingBottom: 'max(24px, env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
-            <div className="px-4 pt-4">
-              <p className="text-sm text-gray-400 text-center mb-3">Partager le rapport</p>
-
-              {/* Google Drive */}
-              <button onClick={handleDriveClick} className="w-full h-14 btn-secondary rounded-xl font-semibold text-base flex items-center justify-center gap-3 active:scale-[0.97] transition-all mb-3">
-                <span className="text-xl">☁️</span>
-                {driveStatus === 'uploading' ? (
-                  <span className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Envoi en cours…
-                  </span>
-                ) : driveStatus === 'success' ? (
-                  <span className="flex items-center gap-2 text-emerald-400">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                    Enregistré dans Drive
-                  </span>
-                ) : driveStatus === 'error' ? (
-                  <span className="text-red-400">Erreur — Réessayer</span>
-                ) : (
-                  'Envoyer vers Google Drive'
-                )}
+      {/* ===== MODALE PRÉVISUALISATION PDF ===== */}
+      {showPdfPreview && pdfBlobUrl && (
+        <div className="fixed inset-0 z-50 bg-black flex flex-col">
+          {/* Header modale */}
+          <div className="flex items-center justify-between px-4 py-3 bg-[#1A1A1A] shrink-0">
+            <span className="text-white font-semibold text-sm truncate flex-1">
+              Rapport — {chantier.client_prenom} {chantier.client_nom}
+            </span>
+            <div className="flex items-center gap-3 shrink-0">
+              <button onClick={handleDownloadFromPreview} className="text-emerald-400 text-sm font-medium active:text-emerald-300">
+                Télécharger
               </button>
-
-              {/* Lien Drive si succès */}
-              {driveStatus === 'success' && driveLink && (
-                <a href={driveLink} target="_blank" rel="noopener noreferrer" className="block text-center text-sm text-emerald-600 font-medium mb-3 active:text-emerald-700">
-                  Ouvrir dans Drive →
-                </a>
-              )}
-
-              {/* Partage natif */}
-              <button onClick={handleNativeShare} className="w-full h-14 btn-tertiary rounded-xl font-semibold text-base flex items-center justify-center gap-3 transition-all mb-2">
-                <span className="text-xl">📤</span>
-                Partager le PDF
-              </button>
-
-              <button onClick={() => { setShowShareSheet(false); setDriveStatus('idle'); }} className="w-full h-12 text-gray-500 font-medium text-sm rounded-xl active:bg-gray-100 transition-colors">
-                Annuler
+              <button onClick={closePdfPreview} className="text-white text-sm font-medium active:text-gray-300 ml-2">
+                Fermer ✕
               </button>
             </div>
           </div>
+
+          {/* Iframe PDF */}
+          <iframe
+            src={`${pdfBlobUrl}#toolbar=1&navpanes=0&scrollbar=1`}
+            className="flex-1 w-full border-0 bg-gray-100"
+            title="Aperçu du rapport"
+          />
         </div>
       )}
 
