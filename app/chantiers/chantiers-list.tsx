@@ -204,17 +204,22 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
               <p className="text-gray-400 text-base">Aucun résultat</p>
             </div>
           ) : (
-            <div className="flex flex-col gap-3">
-              {filtered.map((chantier, i) => (
-                <div
-                  key={chantier.id}
-                  className="animate-card-appear"
-                  style={{ animationDelay: `${i * 60}ms` }}
-                >
-                  <ChantierCard chantier={chantier} onDelete={handleDeleteRequest} />
-                </div>
-              ))}
-            </div>
+            <>
+              <div className="flex flex-col gap-3">
+                {filtered.map((chantier, i) => (
+                  <div
+                    key={chantier.id}
+                    className="animate-card-appear"
+                    style={{ animationDelay: `${i * 60}ms` }}
+                  >
+                    <ChantierCard chantier={chantier} onDelete={handleDeleteRequest} />
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 text-center mt-4">
+                Appuyez longuement sur un chantier pour le supprimer
+              </p>
+            </>
           )}
         </div>
       </main>
@@ -239,6 +244,7 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
       {deleteTarget && (
         <DeleteChantierModal
           clientName={`${deleteTarget.client_prenom} ${deleteTarget.client_nom}`.trim()}
+          clientAddress={deleteTarget.client_adresse}
           deleting={deleting}
           onConfirm={handleConfirmDelete}
           onCancel={() => setDeleteTarget(null)}
