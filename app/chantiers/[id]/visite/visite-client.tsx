@@ -378,12 +378,20 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
                 <p className="text-sm text-gray-400 truncate">{chantier.client_adresse}</p>
               )}
             </div>
-            <button
-              onClick={() => setShowEndConfirm(true)}
-              className="text-sm bg-white text-[#1A1A1A] px-3 py-1.5 rounded-xl font-medium border border-[#E5E7EB] active:bg-gray-100 transition-colors whitespace-nowrap"
-            >
-              Terminer
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => router.push('/chantiers')}
+                className="flex items-center gap-1 px-2 py-2 min-w-[44px] min-h-[44px] active:opacity-70 transition-opacity"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
+              </button>
+              <button
+                onClick={() => setShowEndConfirm(true)}
+                className="text-sm bg-white text-[#1A1A1A] px-3 py-1.5 rounded-xl font-medium border border-[#E5E7EB] active:bg-gray-100 transition-colors whitespace-nowrap"
+              >
+                Terminer
+              </button>
+            </div>
           </div>
           {isRecording ? (
             <div className="flex items-center gap-2 mt-1">

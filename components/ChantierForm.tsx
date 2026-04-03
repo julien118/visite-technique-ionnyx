@@ -235,18 +235,28 @@ export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
               {isNew && !chantierId ? 'Nouvelle visite' : `${form.client_prenom} ${form.client_nom}`.trim() || 'Fiche chantier'}
             </h1>
           </div>
-          {/* Indicateur de sauvegarde */}
-          <div className="text-sm">
-            {saving && <span className="text-gray-400">Sauvegarde…</span>}
-            {saved && (
-              <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full text-xs font-medium">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-                Sauvegardé
-              </span>
-            )}
-            {error && <span className="text-red-400 text-xs">Erreur</span>}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Indicateur de sauvegarde */}
+            <div className="text-sm">
+              {saving && <span className="text-gray-400">Sauvegarde…</span>}
+              {saved && (
+                <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full text-xs font-medium">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  Sauvegardé
+                </span>
+              )}
+              {error && <span className="text-red-400 text-xs">Erreur</span>}
+            </div>
+            {/* Raccourci accueil */}
+            <button
+              onClick={() => router.push('/chantiers')}
+              className="flex items-center gap-1 px-2 py-2 -mr-2 min-w-[44px] min-h-[44px] active:opacity-70 transition-opacity"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
+              <span className="text-xs text-emerald-400 font-medium hidden sm:inline">Accueil</span>
+            </button>
           </div>
         </div>
       </header>
