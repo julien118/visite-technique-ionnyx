@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       refresh_token: profile.google_refresh_token,
     });
 
-    // Listener pour sauvegarder les nouveaux tokens après refresh
+    // Sauvegarder les nouveaux tokens après refresh automatique
     oauth2Client.on('tokens', async (tokens) => {
       const updateData: Record<string, string | null> = {};
       if (tokens.access_token) updateData.google_access_token = tokens.access_token;
@@ -67,28 +67,39 @@ export async function POST(request: NextRequest) {
 
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
-    // 1. Trouver ou créer le dossier
-    const folderRes = await drive.files.list({
+    // ===== ÉTAPE 1 — Chercher le dossier existant =====
+    const searchResponse = await drive.files.list({
       q: `name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
       fields: 'files(id, name)',
+      spaces: 'drive',
     });
 
-    let folderId: string;
+    const existingFolders = searchResponse.data.files;
+    let folderId: string | null = null;
 
-    if (folderRes.data.files && folderRes.data.files.length > 0) {
-      folderId = folderRes.data.files[0].id!;
+    // ===== ÉTAPE 2 — Utiliser ou créer le dossier =====
+    if (existingFolders && existingFolders.length > 0 && existingFolders[0].id) {
+      folderId = existingFolders[0].id;
+      console.log('[Drive] Dossier existant trouvé:', folderId);
     } else {
-      const folder = await drive.files.create({
+      const folderResponse = await drive.files.create({
         requestBody: {
           name: FOLDER_NAME,
           mimeType: 'application/vnd.google-apps.folder',
         },
         fields: 'id',
       });
-      folderId = folder.data.id!;
+      folderId = folderResponse.data.id || null;
+      console.log('[Drive] Nouveau dossier créé:', folderId);
     }
 
-    // 2. Récupérer le chantier + rapport pour construire le PDF
+    // Vérification de sécurité
+    if (!folderId) {
+      console.error('[Drive] Impossible de créer ou trouver le dossier');
+      return NextResponse.json({ error: 'Impossible de créer le dossier Drive' }, { status: 500 });
+    }
+
+    // ===== Récupérer le chantier =====
     const { data: chantier } = await supabase
       .from('chantiers')
       .select('client_prenom, client_nom, date_visite')
@@ -99,7 +110,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Chantier introuvable' }, { status: 404 });
     }
 
-    // Générer le PDF via la route existante (fetch interne)
+    // ===== Générer le PDF =====
     const pdfResponse = await fetch(new URL('/api/export-pdf', request.url), {
       method: 'POST',
       headers: {
@@ -115,16 +126,22 @@ export async function POST(request: NextRequest) {
 
     const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
 
-    // 3. Construire le nom du fichier
-    const dateVisite = new Date(chantier.date_visite);
-    const dd = String(dateVisite.getDate()).padStart(2, '0');
-    const mm = String(dateVisite.getMonth() + 1).padStart(2, '0');
-    const yyyy = dateVisite.getFullYear();
-    const fileName = `Rapport-${chantier.client_nom}-${chantier.client_prenom}-${dd}-${mm}-${yyyy}.pdf`
+    // ===== ÉTAPE 3 — Construire le nom du fichier =====
+    const dateFormatted = new Date(chantier.date_visite)
+      .toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      })
+      .replace(/\//g, '-');
+
+    const fileName = `Rapport-${chantier.client_nom}-${chantier.client_prenom}-${dateFormatted}.pdf`
       .replace(/\s+/g, '-');
 
-    // 4. Uploader le PDF dans le dossier
-    const file = await drive.files.create({
+    // ===== ÉTAPE 4 — Uploader le PDF DANS le dossier =====
+    console.log('[Drive] Upload vers dossier:', folderId, '| Fichier:', fileName);
+
+    const uploadResponse = await drive.files.create({
       requestBody: {
         name: fileName,
         mimeType: 'application/pdf',
@@ -134,17 +151,20 @@ export async function POST(request: NextRequest) {
         mimeType: 'application/pdf',
         body: Readable.from(pdfBuffer),
       },
-      fields: 'id, webViewLink',
+      fields: 'id, webViewLink, name',
     });
 
+    console.log('[Drive] Fichier créé:', uploadResponse.data.name, '| ID:', uploadResponse.data.id);
+
+    // ===== ÉTAPE 5 — Retourner le lien =====
     return NextResponse.json({
       success: true,
-      fileId: file.data.id,
-      webViewLink: file.data.webViewLink,
-      fileName,
+      fileName: uploadResponse.data.name,
+      webViewLink: uploadResponse.data.webViewLink,
+      folderId,
     });
   } catch (error) {
-    console.error('Erreur upload Drive:', error);
+    console.error('[Drive] Erreur upload:', error);
     return NextResponse.json(
       { error: 'Erreur lors de l\'envoi vers Google Drive' },
       { status: 500 }
