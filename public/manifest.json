@@ -3,8 +3,8 @@
   "short_name": "Visite",
   "start_url": "/chantiers",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#1E3A5F",
+  "background_color": "#F8FAFC",
+  "theme_color": "#1A1A1A",
   "icons": [
     {
       "src": "/icon-192.png",
