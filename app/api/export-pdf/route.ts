@@ -143,39 +143,46 @@ function getImageDimensions(data: Uint8Array): { width: number; height: number }
 async function buildPdf(contenu: RapportContenu): Promise<Buffer> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 15;
-  const contentWidth = pageWidth - margin * 2;
-  let y = margin;
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const marginH = 18; // marges horizontales (~48px)
+  const marginV = 15; // marge verticale haute
+  const contentWidth = pageWidth - marginH * 2;
+  const bottomLimit = pageHeight - 18; // marge basse
+  let y = marginV;
+
+  // Line heights
+  const LH_DESC = 5;    // ~1.6 line-height pour texte 9pt
+  const LH_PV = 4.8;    // ~1.5 line-height pour points de vigilance
 
   function checkPage(needed: number) {
-    if (y + needed > doc.internal.pageSize.getHeight() - 20) {
+    if (y + needed > bottomLimit) {
       doc.addPage();
-      y = margin;
+      y = marginV;
     }
   }
 
   // ===== HEADER =====
   doc.setFillColor(26, 26, 26);
-  doc.rect(0, 0, pageWidth, 30, 'F');
+  doc.rect(0, 0, pageWidth, 32, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
-  doc.text('RAPPORT DE VISITE', margin, 14);
+  doc.text('RAPPORT DE VISITE', marginH, 15);
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   const client = contenu.client;
   const dateFormatted = new Date(client.date_visite).toLocaleDateString('fr-FR', {
     day: 'numeric', month: 'long', year: 'numeric',
   });
-  doc.text(`${client.prenom} ${client.nom} — ${dateFormatted}`, margin, 22);
-  y = 38;
+  doc.text(`${client.prenom} ${client.nom} — ${dateFormatted}`, marginH, 23);
+  y = 40;
 
   // ===== INFOS CLIENT =====
   doc.setTextColor(16, 185, 129);
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.text('INFORMATIONS CLIENT', margin, y);
-  y += 7;
+  doc.text('INFORMATIONS CLIENT', marginH, y);
+  y += 8;
 
   doc.setTextColor(60, 60, 60);
   doc.setFontSize(9);
@@ -192,177 +199,199 @@ async function buildPdf(contenu: RapportContenu): Promise<Buffer> {
   ];
 
   for (const [label, value] of clientRows) {
-    checkPage(5);
+    checkPage(6);
     doc.setTextColor(150, 150, 150);
-    doc.text(label, margin, y);
+    doc.text(label, marginH, y);
     doc.setTextColor(60, 60, 60);
-    doc.text(value, margin + 35, y);
-    y += 5;
+    doc.text(value, marginH + 35, y);
+    y += 5.5;
   }
-  y += 5;
+  y += 6;
 
   // ===== OBSERVATIONS =====
   for (let i = 0; i < contenu.observations.length; i++) {
     const obs = contenu.observations[i];
-    checkPage(20);
+
+    // Espacement entre observations (10mm ~ 28px)
+    if (i > 0) {
+      y += 10;
+    }
 
     // Ligne de séparation
+    checkPage(25);
     doc.setDrawColor(220, 220, 220);
-    doc.line(margin, y, pageWidth - margin, y);
-    y += 6;
+    doc.line(marginH, y, pageWidth - marginH, y);
+    y += 8;
 
-    // Titre observation
+    // Titre observation — ne jamais séparer du texte descriptif
     doc.setTextColor(16, 185, 129);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     const titleLines = doc.splitTextToSize(`OBSERVATION ${i + 1} — ${obs.titre}`, contentWidth);
-    checkPage(titleLines.length * 5 + 5);
-    doc.text(titleLines, margin, y);
-    y += titleLines.length * 5 + 3;
+    const titleHeight = titleLines.length * 5.5;
+    // Vérifier que titre + au moins 2 lignes de description tiennent ensemble
+    checkPage(titleHeight + 14);
+    doc.text(titleLines, marginH, y);
+    y += titleHeight + 4; // 10px margin-bottom après titre
 
-    // Description
+    // Description — line-height 1.6
     const { text: descClean } = stripBold(obs.description);
     doc.setTextColor(60, 60, 60);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     const descLines = doc.splitTextToSize(descClean, contentWidth);
     for (const line of descLines) {
-      checkPage(5);
-      doc.text(line, margin, y);
-      y += 4.5;
+      checkPage(LH_DESC + 1);
+      doc.text(line, marginH, y);
+      y += LH_DESC;
     }
-    y += 3;
+    y += 5;
 
     // Photos intégrées
     for (const photo of obs.photos) {
       const imgResult = await fetchImageAsBase64(photo.url);
       if (imgResult) {
         try {
-          // Calculer les dimensions proportionnelles
-          const maxImgWidth = contentWidth * 0.8; // 80% de la largeur pour centrer
-          const maxImgHeight = 90; // mm max
+          // max 85% largeur, max ~108mm hauteur (~380px à 72dpi ≈ 108mm à 25.4mm/in)
+          const maxImgWidth = contentWidth * 0.85;
+          const maxImgHeight = 100;
           const ratio = imgResult.width / imgResult.height;
 
           let imgWidth = maxImgWidth;
           let imgHeight = imgWidth / ratio;
 
-          // Si trop haut, réduire par la hauteur
           if (imgHeight > maxImgHeight) {
             imgHeight = maxImgHeight;
             imgWidth = imgHeight * ratio;
           }
-
-          // Si plus large que le max, réduire par la largeur
           if (imgWidth > maxImgWidth) {
             imgWidth = maxImgWidth;
             imgHeight = imgWidth / ratio;
           }
 
           // Centrer horizontalement
-          const imgX = margin + (contentWidth - imgWidth) / 2;
+          const imgX = marginH + (contentWidth - imgWidth) / 2;
 
-          checkPage(imgHeight + 10);
+          // Estimer la hauteur totale photo + légende pour ne pas couper
+          const legendHeight = photo.legende ? 12 : 0;
+          checkPage(imgHeight + legendHeight + 12);
+
+          y += 5; // margin-top 16px ≈ 5mm
           doc.addImage(imgResult.dataUri, 'JPEG', imgX, y, imgWidth, imgHeight);
-          y += imgHeight + 2;
+          y += imgHeight;
 
+          // Légende — margin-top 3mm (~8px), centrée, italic, gris
           if (photo.legende) {
+            y += 3;
             const { text: legendClean } = stripBold(photo.legende);
             doc.setFontSize(8);
-            doc.setTextColor(120, 120, 120);
+            doc.setTextColor(107, 114, 128); // #6B7280
+            doc.setFont('helvetica', 'italic');
             const legendLines = doc.splitTextToSize(legendClean, contentWidth);
             for (const line of legendLines) {
               checkPage(4);
-              doc.text(line, margin, y);
-              y += 3.5;
+              doc.text(line, pageWidth / 2, y, { align: 'center' });
+              y += 3.8;
             }
+            doc.setFont('helvetica', 'normal');
           }
-          y += 4;
+          y += 7; // margin-bottom 20px ≈ 7mm
         } catch {
           // Skip image on error
         }
       }
     }
 
-    // Points de vigilance
+    // Points de vigilance — margin-top 6mm, padding 12px 16px
     if (obs.points_vigilance.length > 0) {
-      checkPage(10);
+      y += 6;
+      const pvPadH = 5; // ~16px horizontal
+      const pvPadV = 4; // ~12px vertical
+      const pvLineCount = obs.points_vigilance.length;
+      const pvHeight = pvLineCount * LH_PV + pvPadV * 2 + 5;
+
+      checkPage(pvHeight + 2);
       doc.setFillColor(236, 253, 245);
-      const pvHeight = obs.points_vigilance.length * 4.5 + 10;
-      doc.roundedRect(margin, y, contentWidth, pvHeight, 2, 2, 'F');
-      y += 5;
-      doc.setFontSize(8);
+      doc.roundedRect(marginH, y, contentWidth, pvHeight, 2, 2, 'F');
+      y += pvPadV;
+
+      doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(5, 150, 105);
-      doc.text('Points de vigilance', margin + 3, y);
-      y += 4;
+      doc.text('Points de vigilance', marginH + pvPadH, y + 1);
+      y += 5;
+
+      doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
+      doc.setTextColor(60, 60, 60);
       for (const pv of obs.points_vigilance) {
         const { text: pvClean } = stripBold(pv);
-        checkPage(5);
-        doc.text(`• ${pvClean}`, margin + 3, y);
-        y += 4.5;
+        doc.text(`•  ${pvClean}`, marginH + pvPadH, y);
+        y += LH_PV;
       }
-      y += 3;
+      y += pvPadV;
+      y += 8; // margin-bottom 24px ≈ 8mm
     }
   }
 
   // ===== Accès chantier =====
   if (contenu.acces_chantier) {
-    checkPage(15);
+    y += 8;
+    checkPage(20);
     doc.setDrawColor(220, 220, 220);
-    doc.line(margin, y, pageWidth - margin, y);
-    y += 6;
+    doc.line(marginH, y, pageWidth - marginH, y);
+    y += 8;
     doc.setTextColor(16, 185, 129);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
-    doc.text('ACCÈS CHANTIER', margin, y);
-    y += 6;
+    doc.text('ACCÈS CHANTIER', marginH, y);
+    y += 7;
     const { text: accesClean } = stripBold(contenu.acces_chantier);
     doc.setTextColor(60, 60, 60);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     const accesLines = doc.splitTextToSize(accesClean, contentWidth);
     for (const line of accesLines) {
-      checkPage(5);
-      doc.text(line, margin, y);
-      y += 4.5;
+      checkPage(LH_DESC + 1);
+      doc.text(line, marginH, y);
+      y += LH_DESC;
     }
-    y += 5;
+    y += 6;
   }
 
   // ===== Durée estimée =====
   if (contenu.duree_estimee) {
-    checkPage(15);
+    checkPage(18);
     doc.setTextColor(16, 185, 129);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
-    doc.text('DURÉE ESTIMÉE', margin, y);
-    y += 6;
+    doc.text('DURÉE ESTIMÉE', marginH, y);
+    y += 7;
     const { text: dureeClean } = stripBold(contenu.duree_estimee);
     doc.setTextColor(60, 60, 60);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.text(dureeClean, margin, y);
-    y += 8;
+    doc.text(dureeClean, marginH, y);
+    y += 10;
   }
 
   // ===== Notes =====
   if (contenu.notes) {
-    checkPage(15);
+    checkPage(18);
     doc.setTextColor(16, 185, 129);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
-    doc.text('NOTES', margin, y);
-    y += 6;
+    doc.text('NOTES', marginH, y);
+    y += 7;
     const { text: notesClean } = stripBold(contenu.notes);
     doc.setTextColor(60, 60, 60);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     const notesLines = doc.splitTextToSize(notesClean, contentWidth);
     for (const line of notesLines) {
-      checkPage(5);
-      doc.text(line, margin, y);
-      y += 4.5;
+      checkPage(LH_DESC + 1);
+      doc.text(line, marginH, y);
+      y += LH_DESC;
     }
   }
 
@@ -375,7 +404,7 @@ async function buildPdf(contenu: RapportContenu): Promise<Buffer> {
     doc.text(
       'Rapport généré par IONNYX — Assistant de Visite IA',
       pageWidth / 2,
-      doc.internal.pageSize.getHeight() - 8,
+      pageHeight - 8,
       { align: 'center' }
     );
   }
