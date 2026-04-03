@@ -8,7 +8,6 @@ interface ReportViewProps {
   onUpdate: (contenu: RapportContenu) => void;
 }
 
-// Parse markdown bold (**text**) into React elements
 function renderBoldText(text: string) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((part, i) => {
@@ -53,24 +52,24 @@ export default function ReportView({ contenu, onUpdate }: ReportViewProps) {
   }
 
   return (
-    <div className="space-y-0">
+    <div className="space-y-0" style={{ boxShadow: '0 8px 60px rgba(0,0,0,0.08)' }}>
       {/* En-tête rapport */}
-      <div className="bg-[#1E3A5F] text-white p-5 rounded-t-xl">
-        <h2 className="text-lg font-bold">RAPPORT DE VISITE</h2>
-        <p className="text-blue-200 text-sm mt-1">
+      <div className="bg-[#1A1A1A] text-white p-5 rounded-t-2xl">
+        <h2 className="text-xl font-bold tracking-wide">RAPPORT DE VISITE</h2>
+        <p className="text-gray-400 text-sm mt-1">
           {client.prenom} {client.nom} — {dateFormatted}
         </p>
       </div>
 
       {/* Infos client */}
-      <div className="bg-white border border-t-0 border-gray-200 p-5">
-        <h3 className="text-sm font-bold text-[#1E3A5F] mb-3">INFORMATIONS CLIENT</h3>
-        <div className="space-y-1.5 text-sm">
+      <div className="bg-white border border-t-0 border-[#F3F4F6] p-5">
+        <h3 className="text-xs font-bold text-gray-400 mb-3 tracking-wide">INFORMATIONS CLIENT</h3>
+        <div className="space-y-2 text-sm">
           <Row label="Nom" value={`${client.prenom} ${client.nom}`} />
-          <Row label="Adresse" value={client.adresse} />
+          {client.adresse && <Row label="Adresse" value={client.adresse} />}
           {client.telephone && <Row label="Téléphone" value={client.telephone} />}
           {client.email && <Row label="Email" value={client.email} />}
-          <Row label="Date de visite" value={dateFormatted} />
+          <Row label="Date" value={dateFormatted} />
           {client.provenance && <Row label="Provenance" value={client.provenance} />}
           <Row label="Type" value={client.type_chantier === 'sous_traitance' ? 'Sous-traitance' : 'Direct client'} />
         </div>
@@ -94,24 +93,24 @@ export default function ReportView({ contenu, onUpdate }: ReportViewProps) {
 
       {/* Accès chantier */}
       {contenu.acces_chantier && (
-        <div className="bg-white border border-t-0 border-gray-200 p-5">
-          <h3 className="text-sm font-bold text-[#1E3A5F] mb-2">ACCÈS CHANTIER</h3>
+        <div className="bg-white border border-t-0 border-[#F3F4F6] p-5">
+          <h3 className="text-xs font-bold text-gray-400 mb-2 tracking-wide">ACCÈS CHANTIER</h3>
           <p className="text-sm text-gray-700">{renderBoldText(contenu.acces_chantier)}</p>
         </div>
       )}
 
       {/* Durée estimée */}
       {contenu.duree_estimee && (
-        <div className="bg-white border border-t-0 border-gray-200 p-5">
-          <h3 className="text-sm font-bold text-[#1E3A5F] mb-2">DURÉE ESTIMÉE</h3>
+        <div className="bg-white border border-t-0 border-[#F3F4F6] p-5">
+          <h3 className="text-xs font-bold text-gray-400 mb-2 tracking-wide">DURÉE ESTIMÉE</h3>
           <p className="text-sm text-gray-700">{renderBoldText(contenu.duree_estimee)}</p>
         </div>
       )}
 
       {/* Notes */}
       {contenu.notes && (
-        <div className="bg-white border border-t-0 border-gray-200 p-5 rounded-b-xl">
-          <h3 className="text-sm font-bold text-[#1E3A5F] mb-2">NOTES</h3>
+        <div className="bg-white border border-t-0 border-[#F3F4F6] p-5 rounded-b-2xl">
+          <h3 className="text-xs font-bold text-gray-400 mb-2 tracking-wide">NOTES</h3>
           <p className="text-sm text-gray-700">{renderBoldText(contenu.notes)}</p>
         </div>
       )}
@@ -121,7 +120,7 @@ export default function ReportView({ contenu, onUpdate }: ReportViewProps) {
         <p className="text-xs text-gray-400">Rapport généré par IONNYX — Assistant de Visite IA</p>
       </div>
 
-      {/* Lightbox plein écran avec pinch-to-zoom */}
+      {/* Lightbox */}
       {fullscreenPhoto && (
         <PhotoLightbox url={fullscreenPhoto} onClose={() => setFullscreenPhoto(null)} />
       )}
@@ -129,7 +128,6 @@ export default function ReportView({ contenu, onUpdate }: ReportViewProps) {
   );
 }
 
-// Lightbox avec pinch-to-zoom
 function PhotoLightbox({ url, onClose }: { url: string; onClose: () => void }) {
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
@@ -223,17 +221,15 @@ function PhotoLightbox({ url, onClose }: { url: string; onClose: () => void }) {
   );
 }
 
-// Ligne info client
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex">
-      <span className="text-gray-400 w-28 shrink-0">{label}</span>
-      <span className="text-gray-800">{value}</span>
+    <div className="flex border-b border-[#F3F4F6] pb-2 last:border-b-0 last:pb-0">
+      <span className="text-xs text-gray-400 w-24 shrink-0 pt-0.5">{label}</span>
+      <span className="text-sm text-gray-900 font-medium">{value}</span>
     </div>
   );
 }
 
-// Bloc observation — photos GRANDES pleine largeur
 function ObservationBlock({
   obs,
   index,
@@ -256,26 +252,28 @@ function ObservationBlock({
   onPhotoClick: (url: string) => void;
 }) {
   return (
-    <div className="bg-white border border-t-0 border-gray-200 p-5">
-      <h3 className="text-sm font-bold text-[#1E3A5F] mb-2">
+    <div className="bg-white border border-t-0 border-[#F3F4F6] p-5">
+      {/* Titre observation — vert IONNYX */}
+      <h3 className="text-base font-bold text-emerald-600 mb-1">
         OBSERVATION {index + 1} — {obs.titre}
       </h3>
+      <div className="h-0.5 w-12 bg-emerald-500 rounded-full mb-3" />
 
-      {/* Description — clic pour éditer, avec markdown bold */}
+      {/* Description */}
       {isEditing ? (
         <div>
           <textarea
             value={editText}
             onChange={(e) => onEditTextChange(e.target.value)}
             rows={5}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none resize-none text-sm"
+            className="w-full px-3 py-2 rounded-xl input-ionnyx resize-none text-sm"
             autoFocus
           />
           <div className="flex gap-2 mt-2">
-            <button onClick={onSave} className="px-4 py-2 bg-[#1E3A5F] text-white text-sm rounded-lg">
+            <button onClick={onSave} className="px-4 py-2 btn-primary text-sm rounded-lg">
               Enregistrer
             </button>
-            <button onClick={onCancel} className="px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg">
+            <button onClick={onCancel} className="px-4 py-2 btn-tertiary text-sm rounded-lg">
               Annuler
             </button>
           </div>
@@ -289,7 +287,7 @@ function ObservationBlock({
         </p>
       )}
 
-      {/* Photos — GRANDES, pleine largeur */}
+      {/* Photos */}
       {obs.photos.length > 0 && (
         <div className="space-y-3 mt-4">
           {obs.photos.map((photo, pIdx) => (
@@ -304,7 +302,7 @@ function ObservationBlock({
                 className="max-w-full max-h-[420px] w-auto h-auto object-contain block mx-auto rounded-lg"
               />
               {photo.legende && (
-                <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                <p className="text-xs text-gray-400 mt-2 leading-relaxed text-center italic">
                   {renderBoldText(photo.legende)}
                 </p>
               )}
@@ -313,13 +311,16 @@ function ObservationBlock({
         </div>
       )}
 
-      {/* Points de vigilance */}
+      {/* Points de vigilance — vert IONNYX */}
       {obs.points_vigilance.length > 0 && (
-        <div className="mt-4 p-3 bg-amber-50 rounded-lg">
-          <p className="text-xs font-bold text-amber-800 mb-1">Points de vigilance</p>
-          <ul className="list-disc list-inside text-xs text-amber-700 space-y-0.5">
+        <div className="mt-4 p-3 bg-emerald-50 rounded-lg border-l-[3px] border-emerald-500">
+          <p className="text-sm font-semibold text-emerald-700 mb-1">Points de vigilance</p>
+          <ul className="space-y-0.5">
             {obs.points_vigilance.map((pv, pvIdx) => (
-              <li key={pvIdx}>{renderBoldText(pv)}</li>
+              <li key={pvIdx} className="text-sm text-gray-700 flex items-start gap-2">
+                <span className="text-emerald-500 mt-1.5 text-xs">●</span>
+                <span>{renderBoldText(pv)}</span>
+              </li>
             ))}
           </ul>
         </div>

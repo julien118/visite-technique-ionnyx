@@ -104,20 +104,20 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col">
       {/* Header */}
-      <header className="bg-gradient-to-br from-[#1E3A5F] to-[#162d4a] text-white px-4 py-5">
+      <header className="bg-[#1A1A1A] text-white px-4 py-5">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{companyName || userEmail.split('@')[0]}</h1>
-            <p className="text-sm text-blue-300/80 mt-0.5">Assistant de Visite</p>
+            <p className="text-sm text-emerald-400 mt-0.5">Assistant de Visite</p>
           </div>
           <UserMenu />
         </div>
       </header>
 
       {/* Onglets + Recherche (sticky) */}
-      <div className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200">
+      <div className="sticky top-0 z-10 bg-[#F8FAFC] border-b border-gray-200">
         {/* Onglets */}
         <div className="max-w-lg mx-auto">
           <div
@@ -133,20 +133,18 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
                   onClick={() => setActiveTab(tab.key)}
                   className={`flex-shrink-0 min-h-[44px] px-3.5 rounded-full text-sm font-semibold transition-all whitespace-nowrap ${
                     isActive
-                      ? 'bg-[#1E3A5F] text-white shadow-sm'
-                      : 'bg-gray-100 text-gray-600 active:bg-gray-200'
+                      ? 'bg-[#1A1A1A] text-white shadow-sm'
+                      : 'text-gray-500 active:bg-gray-100'
                   }`}
                 >
                   {tab.label} ({count})
                 </button>
               );
             })}
-            {/* Padding de fin pour que le dernier onglet soit visible */}
             <div className="flex-shrink-0 w-4" aria-hidden="true" />
           </div>
         </div>
 
-        {/* Espace 16px entre onglets et recherche */}
         <div className="h-4" />
 
         {/* Barre de recherche */}
@@ -168,7 +166,7 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Rechercher un client, une adresse..."
-              className="w-full h-12 pl-11 pr-10 text-base bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent focus:bg-white outline-none transition-colors"
+              className="w-full h-12 pl-11 pr-10 text-base bg-white border border-[#E5E7EB] rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
             />
             {search && (
               <button
@@ -184,7 +182,7 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
         </div>
       </div>
 
-      {/* Liste scrollable — 16px de marge avant la première carte */}
+      {/* Liste scrollable */}
       <main
         ref={listRef}
         onScroll={handleListScroll}
@@ -193,7 +191,7 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
         <div className="max-w-lg mx-auto px-4 pt-4 pb-32">
           {chantiers.length === 0 ? (
             <div className="text-center py-16">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-200 rounded-full mb-4">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
@@ -207,8 +205,14 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {filtered.map((chantier) => (
-                <ChantierCard key={chantier.id} chantier={chantier} onDelete={handleDeleteRequest} />
+              {filtered.map((chantier, i) => (
+                <div
+                  key={chantier.id}
+                  className="animate-card-appear"
+                  style={{ animationDelay: `${i * 60}ms` }}
+                >
+                  <ChantierCard chantier={chantier} onDelete={handleDeleteRequest} />
+                </div>
               ))}
             </div>
           )}
@@ -216,11 +220,12 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
       </main>
 
       {/* Bouton flottant "Nouvelle visite" */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-gray-50 via-gray-50 to-transparent">
+      <div className="fixed bottom-0 left-0 right-0 p-4 pb-6 bg-gradient-to-t from-[#F8FAFC] via-[#F8FAFC] to-transparent">
         <div className="max-w-lg mx-auto">
           <button
             onClick={() => router.push('/chantiers/nouveau')}
-            className="w-full h-14 bg-[#F97316] text-white font-bold text-lg rounded-xl shadow-lg shadow-orange-200 active:bg-orange-600 active:shadow-md transition-all flex items-center justify-center gap-2"
+            className="w-full h-14 btn-primary font-bold text-lg rounded-2xl transition-transform flex items-center justify-center gap-2"
+            style={{ boxShadow: '0 4px 20px rgba(16,185,129,0.4)' }}
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />

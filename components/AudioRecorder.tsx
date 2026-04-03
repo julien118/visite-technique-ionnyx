@@ -17,12 +17,10 @@ export default function AudioRecorder({ onRecordingComplete, disabled, onRecordi
 
   async function toggleRecording() {
     if (recording) {
-      // Arrêter l'enregistrement
       mediaRecorderRef.current?.stop();
       return;
     }
 
-    // Démarrer l'enregistrement
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream, {
@@ -38,9 +36,7 @@ export default function AudioRecorder({ onRecordingComplete, disabled, onRecordi
       };
 
       mediaRecorder.onstop = () => {
-        // Libérer le micro
         stream.getTracks().forEach((track) => track.stop());
-
         const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
         setRecording(false);
         onRecordingChange?.(false);
@@ -57,16 +53,16 @@ export default function AudioRecorder({ onRecordingComplete, disabled, onRecordi
     }
   }
 
-  // Variante "Décrire cette photo" — bouton vert pleine largeur
+  // Variante "Décrire cette photo"
   if (variant === 'describe') {
     return (
       <button
         onClick={toggleRecording}
         disabled={disabled}
-        className={`w-full h-16 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+        className={`w-full h-14 rounded-xl font-semibold text-lg flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
           recording
             ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
-            : 'bg-green-600 text-white active:bg-green-700 shadow-lg shadow-green-600/30'
+            : 'btn-primary'
         }`}
         style={recording ? { animation: 'pulse-record 1.5s ease-in-out infinite' } : undefined}
       >
@@ -79,7 +75,7 @@ export default function AudioRecorder({ onRecordingComplete, disabled, onRecordi
           </>
         ) : (
           <>
-            <span className="text-2xl">🎙️</span>
+            <span className="text-xl">🎙️</span>
             <span>Décrire cette photo</span>
             {countdown !== undefined && countdown > 0 && (
               <span className="ml-1 bg-white/20 text-white text-sm font-medium px-2 py-0.5 rounded-full">
@@ -97,10 +93,10 @@ export default function AudioRecorder({ onRecordingComplete, disabled, onRecordi
     <button
       onClick={toggleRecording}
       disabled={disabled}
-      className={`flex-1 h-16 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+      className={`flex-1 h-14 rounded-xl font-semibold text-lg flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
         recording
           ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
-          : 'bg-[#F97316] text-white active:bg-orange-600'
+          : 'btn-primary'
       }`}
       style={recording ? { animation: 'pulse-record 1.5s ease-in-out infinite' } : undefined}
     >
@@ -113,7 +109,7 @@ export default function AudioRecorder({ onRecordingComplete, disabled, onRecordi
         </>
       ) : (
         <>
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
           </svg>
           Parler

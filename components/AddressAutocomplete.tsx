@@ -78,11 +78,11 @@ export default function AddressAutocomplete({ value, onChange }: AddressAutocomp
         onChange={(e) => handleInputChange(e.target.value)}
         onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
         placeholder="34 rue Baptiste Marcet, 37000 Tours"
-        className="w-full min-h-[48px] h-12 px-4 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent outline-none"
+        className="w-full min-h-[48px] h-12 px-4 text-base rounded-xl input-ionnyx"
         autoComplete="off"
       />
       {showSuggestions && (
-        <ul className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+        <ul className="absolute z-20 left-0 right-0 mt-1 bg-white border border-[#F3F4F6] rounded-xl shadow-lg overflow-hidden">
           {suggestions.map((s, i) => (
             <li key={i}>
               <button

@@ -77,19 +77,19 @@ export const STATUT_LABELS: Record<ChantierStatut, string> = {
   planifie: 'Planifié',
   en_cours: 'En cours',
   termine: 'Terminé',
-  rapport_genere: 'Rapport généré',
+  rapport_genere: 'Rapport',
 };
 
 export const STATUT_COLORS: Record<ChantierStatut, string> = {
-  planifie: 'bg-blue-100 text-blue-700',
-  en_cours: 'bg-orange-100 text-orange-700',
-  termine: 'bg-yellow-100 text-yellow-700',
-  rapport_genere: 'bg-green-100 text-green-700',
+  planifie: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  en_cours: 'bg-amber-50 text-amber-700 border border-amber-200',
+  termine: 'bg-gray-100 text-gray-600 border border-gray-200',
+  rapport_genere: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
 };
 
 export const STATUT_BORDER_COLORS: Record<ChantierStatut, string> = {
-  planifie: 'border-blue-400',
-  en_cours: 'border-orange-400',
-  termine: 'border-yellow-400',
-  rapport_genere: 'border-green-400',
+  planifie: 'border-emerald-400',
+  en_cours: 'border-amber-400',
+  termine: 'border-gray-300',
+  rapport_genere: 'border-emerald-400',
 };

@@ -100,7 +100,7 @@ function LinkedCard({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 relative overflow-hidden">
+    <div className="bg-white rounded-xl border border-[#F3F4F6] relative overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-3 pb-2">
         <div className="flex items-center gap-2 text-sm text-gray-400">
@@ -147,7 +147,7 @@ function LinkedCard({
 
         {vocal.transcription === null ? (
           <div className="flex items-center gap-2 text-gray-400">
-            <div className="w-4 h-4 border-2 border-gray-300 border-t-[#1E3A5F] rounded-full animate-spin" />
+            <div className="w-4 h-4 border-2 border-gray-300 border-t-[#1A1A1A] rounded-full animate-spin" />
             Transcription en cours…
           </div>
         ) : editing ? (
@@ -162,7 +162,7 @@ function LinkedCard({
             <div className="flex gap-2 mt-2">
               <button
                 onClick={handleSaveEdit}
-                className="px-4 py-2 bg-[#1E3A5F] text-white text-sm rounded-lg active:bg-[#162d4a]"
+                className="px-4 py-2 btn-primary text-sm rounded-lg"
               >
                 Enregistrer
               </button>
@@ -280,11 +280,11 @@ function VocalCard({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 relative group">
+    <div className="bg-white rounded-xl border border-[#F3F4F6] p-4 relative group">
       {/* Header : icône + heure + bouton supprimer */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 text-sm text-gray-400">
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-[#1E3A5F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
           </svg>
           {time}
@@ -302,7 +302,7 @@ function VocalCard({
       {/* Texte transcrit — clic pour éditer */}
       {item.transcription === null ? (
         <div className="flex items-center gap-2 text-gray-400">
-          <div className="w-4 h-4 border-2 border-gray-300 border-t-[#1E3A5F] rounded-full animate-spin" />
+          <div className="w-4 h-4 border-2 border-gray-300 border-t-[#1A1A1A] rounded-full animate-spin" />
           Transcription en cours…
         </div>
       ) : editing ? (
@@ -317,7 +317,7 @@ function VocalCard({
           <div className="flex gap-2 mt-2">
             <button
               onClick={handleSaveEdit}
-              className="px-4 py-2 bg-[#1E3A5F] text-white text-sm rounded-lg active:bg-[#162d4a]"
+              className="px-4 py-2 btn-primary text-sm rounded-lg"
             >
               Enregistrer
             </button>
@@ -391,11 +391,11 @@ function PhotoCard({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 relative">
+    <div className="bg-white rounded-xl border border-[#F3F4F6] p-4 relative">
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 text-sm text-gray-400">
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-[#1E3A5F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
           </svg>
           {time}

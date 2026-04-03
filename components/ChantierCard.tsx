@@ -1,6 +1,6 @@
 'use client';
 
-import { Chantier, STATUT_BORDER_COLORS } from '@/lib/types';
+import { Chantier } from '@/lib/types';
 import { formatDateShort } from '@/lib/utils';
 import StatusBadge from './StatusBadge';
 import { useRouter } from 'next/navigation';
@@ -49,12 +49,10 @@ export default function ChantierCard({ chantier, onDelete }: ChantierCardProps) 
     router.push(`/chantiers/${chantier.id}`);
   }
 
-  const borderColor = STATUT_BORDER_COLORS[chantier.statut];
-
   return (
-    <div className="relative overflow-hidden rounded-xl">
+    <div className="relative overflow-hidden rounded-2xl">
       {/* Zone rouge derrière (révélée par le swipe) */}
-      <div className="absolute inset-y-0 right-0 w-20 bg-red-500 flex items-center justify-center rounded-r-xl">
+      <div className="absolute inset-y-0 right-0 w-20 bg-red-500 flex items-center justify-center rounded-r-2xl">
         <button
           onClick={() => onDelete(chantier.id)}
           className="w-full h-full flex items-center justify-center"
@@ -71,8 +69,11 @@ export default function ChantierCard({ chantier, onDelete }: ChantierCardProps) 
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onClick={handleClick}
-        style={{ transform: `translateX(${offsetX}px)`, transition: isSwiping.current ? 'none' : 'transform 0.2s ease-out' }}
-        className={`relative bg-white rounded-xl cursor-pointer active:bg-gray-50 transition-colors shadow-sm border border-gray-100 border-l-4 ${borderColor} p-4`}
+        style={{
+          transform: `translateX(${offsetX}px)`,
+          transition: isSwiping.current ? 'none' : 'transform 0.2s ease-out',
+        }}
+        className="relative bg-white rounded-2xl cursor-pointer shadow-sm border border-[#F3F4F6] p-5 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300"
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -85,7 +86,7 @@ export default function ChantierCard({ chantier, onDelete }: ChantierCardProps) 
               </p>
             )}
             {chantier.objet_travaux && (
-              <p className="text-sm font-medium text-gray-700 mt-1 line-clamp-2">
+              <p className="text-sm text-gray-500 mt-1 line-clamp-2">
                 {chantier.objet_travaux}
               </p>
             )}

@@ -155,7 +155,7 @@ async function buildPdf(contenu: RapportContenu): Promise<Buffer> {
   }
 
   // ===== HEADER =====
-  doc.setFillColor(30, 58, 95);
+  doc.setFillColor(26, 26, 26);
   doc.rect(0, 0, pageWidth, 30, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(18);
@@ -171,7 +171,7 @@ async function buildPdf(contenu: RapportContenu): Promise<Buffer> {
   y = 38;
 
   // ===== INFOS CLIENT =====
-  doc.setTextColor(30, 58, 95);
+  doc.setTextColor(16, 185, 129);
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
   doc.text('INFORMATIONS CLIENT', margin, y);
@@ -212,7 +212,7 @@ async function buildPdf(contenu: RapportContenu): Promise<Buffer> {
     y += 6;
 
     // Titre observation
-    doc.setTextColor(30, 58, 95);
+    doc.setTextColor(16, 185, 129);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     const titleLines = doc.splitTextToSize(`OBSERVATION ${i + 1} — ${obs.titre}`, contentWidth);
@@ -286,13 +286,13 @@ async function buildPdf(contenu: RapportContenu): Promise<Buffer> {
     // Points de vigilance
     if (obs.points_vigilance.length > 0) {
       checkPage(10);
-      doc.setFillColor(254, 243, 199);
+      doc.setFillColor(236, 253, 245);
       const pvHeight = obs.points_vigilance.length * 4.5 + 10;
       doc.roundedRect(margin, y, contentWidth, pvHeight, 2, 2, 'F');
       y += 5;
       doc.setFontSize(8);
       doc.setFont('helvetica', 'bold');
-      doc.setTextColor(146, 64, 14);
+      doc.setTextColor(5, 150, 105);
       doc.text('Points de vigilance', margin + 3, y);
       y += 4;
       doc.setFont('helvetica', 'normal');
@@ -312,7 +312,7 @@ async function buildPdf(contenu: RapportContenu): Promise<Buffer> {
     doc.setDrawColor(220, 220, 220);
     doc.line(margin, y, pageWidth - margin, y);
     y += 6;
-    doc.setTextColor(30, 58, 95);
+    doc.setTextColor(16, 185, 129);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.text('ACCÈS CHANTIER', margin, y);
@@ -333,7 +333,7 @@ async function buildPdf(contenu: RapportContenu): Promise<Buffer> {
   // ===== Durée estimée =====
   if (contenu.duree_estimee) {
     checkPage(15);
-    doc.setTextColor(30, 58, 95);
+    doc.setTextColor(16, 185, 129);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.text('DURÉE ESTIMÉE', margin, y);
@@ -349,7 +349,7 @@ async function buildPdf(contenu: RapportContenu): Promise<Buffer> {
   // ===== Notes =====
   if (contenu.notes) {
     checkPage(15);
-    doc.setTextColor(30, 58, 95);
+    doc.setTextColor(16, 185, 129);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.text('NOTES', margin, y);
