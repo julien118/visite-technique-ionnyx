@@ -9,6 +9,7 @@ import ReportView from '@/components/ReportView';
 interface RapportClientProps {
   chantier: Chantier;
   rapport: Rapport | null;
+  hasDriveConnected: boolean;
 }
 
 const GENERATION_STEPS = [
@@ -27,45 +28,18 @@ function StepIcon({ icon, done }: { icon: string; done: boolean }) {
       </svg>
     );
   }
-
   const cls = 'text-gray-400';
-  switch (icon) {
-    case 'mic':
-      return (
-        <svg xmlns="http://www.w3.org/2000/svg" className={`w-4 h-4 ${cls}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-        </svg>
-      );
-    case 'photo':
-      return (
-        <svg xmlns="http://www.w3.org/2000/svg" className={`w-4 h-4 ${cls}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-      );
-    case 'doc':
-      return (
-        <svg xmlns="http://www.w3.org/2000/svg" className={`w-4 h-4 ${cls}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-      );
-    case 'pen':
-      return (
-        <svg xmlns="http://www.w3.org/2000/svg" className={`w-4 h-4 ${cls}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-        </svg>
-      );
-    case 'check':
-      return (
-        <svg xmlns="http://www.w3.org/2000/svg" className={`w-4 h-4 ${cls}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      );
-    default:
-      return null;
-  }
+  const icons: Record<string, React.ReactNode> = {
+    mic: <svg xmlns="http://www.w3.org/2000/svg" className={`w-4 h-4 ${cls}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>,
+    photo: <svg xmlns="http://www.w3.org/2000/svg" className={`w-4 h-4 ${cls}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>,
+    doc: <svg xmlns="http://www.w3.org/2000/svg" className={`w-4 h-4 ${cls}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
+    pen: <svg xmlns="http://www.w3.org/2000/svg" className={`w-4 h-4 ${cls}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>,
+    check: <svg xmlns="http://www.w3.org/2000/svg" className={`w-4 h-4 ${cls}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+  };
+  return <>{icons[icon] || null}</>;
 }
 
-export default function RapportClient({ chantier, rapport: initialRapport }: RapportClientProps) {
+export default function RapportClient({ chantier, rapport: initialRapport, hasDriveConnected }: RapportClientProps) {
   const router = useRouter();
   const supabase = createClient();
   const [rapport, setRapport] = useState(initialRapport);
@@ -75,6 +49,13 @@ export default function RapportClient({ chantier, rapport: initialRapport }: Rap
   const [currentStep, setCurrentStep] = useState(0);
   const stepIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasStartedRef = useRef(false);
+
+  // Share sheet + Drive
+  const [showShareSheet, setShowShareSheet] = useState(false);
+  const [showDriveModal, setShowDriveModal] = useState(false);
+  const [driveStatus, setDriveStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [driveLink, setDriveLink] = useState('');
+  const [shareToast, setShareToast] = useState('');
 
   const contenu = rapport?.contenu_json as RapportContenu | null;
 
@@ -90,40 +71,28 @@ export default function RapportClient({ chantier, rapport: initialRapport }: Rap
     if (generating) {
       setCurrentStep(0);
       stepIntervalRef.current = setInterval(() => {
-        setCurrentStep((prev) => {
-          if (prev < GENERATION_STEPS.length - 1) return prev + 1;
-          return prev;
-        });
+        setCurrentStep((prev) => prev < GENERATION_STEPS.length - 1 ? prev + 1 : prev);
       }, 2500);
     } else {
-      if (stepIntervalRef.current) {
-        clearInterval(stepIntervalRef.current);
-        stepIntervalRef.current = null;
-      }
+      if (stepIntervalRef.current) { clearInterval(stepIntervalRef.current); stepIntervalRef.current = null; }
     }
-    return () => {
-      if (stepIntervalRef.current) clearInterval(stepIntervalRef.current);
-    };
+    return () => { if (stepIntervalRef.current) clearInterval(stepIntervalRef.current); };
   }, [generating]);
 
   async function handleGenerate() {
     setGenerating(true);
     setError('');
-
     try {
       const response = await fetch('/api/generate-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chantierId: chantier.id }),
       });
-
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || 'Erreur génération');
       }
-
       const { rapport: rapportContenu } = await response.json();
-
       setRapport((prev) => ({
         id: prev?.id || '',
         chantier_id: chantier.id,
@@ -143,12 +112,8 @@ export default function RapportClient({ chantier, rapport: initialRapport }: Rap
 
   async function handleUpdateContenu(updatedContenu: RapportContenu) {
     setRapport((prev) => prev ? { ...prev, contenu_json: updatedContenu } : null);
-
     if (rapport?.id) {
-      await supabase
-        .from('rapports')
-        .update({ contenu_json: updatedContenu })
-        .eq('id', rapport.id);
+      await supabase.from('rapports').update({ contenu_json: updatedContenu }).eq('id', rapport.id);
     }
   }
 
@@ -160,14 +125,10 @@ export default function RapportClient({ chantier, rapport: initialRapport }: Rap
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chantierId: chantier.id }),
       });
-
       if (!response.ok) throw new Error('Erreur export PDF');
-
       const blob = await response.blob();
       const dateStr = new Date(chantier.date_visite).toISOString().slice(0, 10);
-      const fileName = `rapport-visite-${chantier.client_prenom}-${chantier.client_nom}-${dateStr}.pdf`
-        .replace(/\s+/g, '-');
-
+      const fileName = `rapport-visite-${chantier.client_prenom}-${chantier.client_nom}-${dateStr}.pdf`.replace(/\s+/g, '-');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -184,21 +145,58 @@ export default function RapportClient({ chantier, rapport: initialRapport }: Rap
     }
   }
 
-  const [shareToast, setShareToast] = useState(false);
-  async function handleShare() {
+  // Partage natif
+  async function handleNativeShare() {
+    setShowShareSheet(false);
     const shareUrl = window.location.href;
     const title = `Rapport de visite — ${chantier.client_prenom} ${chantier.client_nom}`;
-
     if (navigator.share) {
-      try {
-        await navigator.share({ title, url: shareUrl });
-      } catch {
-        // Annulé
-      }
+      try { await navigator.share({ title, url: shareUrl }); } catch { /* annulé */ }
     } else {
       await navigator.clipboard.writeText(shareUrl);
-      setShareToast(true);
-      setTimeout(() => setShareToast(false), 2000);
+      setShareToast('Lien copié dans le presse-papier');
+      setTimeout(() => setShareToast(''), 2000);
+    }
+  }
+
+  // Google Drive
+  function handleDriveClick() {
+    setShowShareSheet(false);
+    if (hasDriveConnected) {
+      uploadToDrive();
+    } else {
+      setShowDriveModal(true);
+    }
+  }
+
+  function handleConnectDrive() {
+    setShowDriveModal(false);
+    window.location.href = `/api/auth/google?chantierId=${chantier.id}`;
+  }
+
+  async function uploadToDrive() {
+    setDriveStatus('uploading');
+    try {
+      const response = await fetch('/api/drive/upload-rapport', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chantierId: chantier.id }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        if (data.error === 'Google Drive non connecté') {
+          setDriveStatus('idle');
+          setShowDriveModal(true);
+          return;
+        }
+        throw new Error(data.error || 'Erreur Drive');
+      }
+      const { webViewLink } = await response.json();
+      setDriveLink(webViewLink || '');
+      setDriveStatus('success');
+    } catch (err) {
+      console.error('Erreur Drive:', err);
+      setDriveStatus('error');
     }
   }
 
@@ -221,69 +219,32 @@ export default function RapportClient({ chantier, rapport: initialRapport }: Rap
       </header>
 
       <main className="max-w-lg mx-auto px-4 py-4 pb-32">
-        {/* Loader de génération */}
+        {/* Loader */}
         {generating && (
           <div className="py-12">
-            {/* Barre de progression en haut */}
             <div className="h-[3px] bg-gray-200 rounded-full mb-8 overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: `${((currentStep + 1) / GENERATION_STEPS.length) * 100}%`,
-                  background: 'linear-gradient(90deg, #1A1A1A, #10B981)',
-                }}
-              />
+              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${((currentStep + 1) / GENERATION_STEPS.length) * 100}%`, background: 'linear-gradient(90deg, #1A1A1A, #10B981)' }} />
             </div>
-
-            {/* Icone animée */}
             <div className="flex justify-center mb-8">
-              <div
-                className="w-20 h-20 rounded-full flex items-center justify-center"
-                style={{ background: 'linear-gradient(135deg, #D1FAE5, #A7F3D0)', animation: 'spin 3s linear infinite' }}
-              >
+              <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #D1FAE5, #A7F3D0)', animation: 'spin 3s linear infinite' }}>
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-9 h-9 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} style={{ animation: 'spin 3s linear infinite reverse' }}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
             </div>
-
-            <p className="text-center text-xl font-bold text-gray-900 mb-1">
-              Rapport en cours de construction
-            </p>
-            <p className="text-center text-sm text-gray-500 mb-8">
-              {chantier.client_prenom} {chantier.client_nom}
-            </p>
-
-            {/* Étapes */}
+            <p className="text-center text-xl font-bold text-gray-900 mb-1">Rapport en cours de construction</p>
+            <p className="text-center text-sm text-gray-500 mb-8">{chantier.client_prenom} {chantier.client_nom}</p>
             <div className="space-y-2 max-w-xs mx-auto">
               {GENERATION_STEPS.map((step, i) => {
                 const isDone = i < currentStep;
                 const isCurrent = i === currentStep;
                 const isVisible = i <= currentStep;
-
                 return (
-                  <div
-                    key={i}
-                    className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-500 ${
-                      !isVisible ? 'opacity-0 translate-y-2' : ''
-                    } ${
-                      isCurrent ? 'bg-[#F3F4F6]' : isDone ? 'bg-emerald-50' : 'bg-[#F9FAFB]'
-                    }`}
-                  >
-                    <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${
-                      isDone ? 'bg-emerald-100' : isCurrent ? 'bg-white' : 'bg-gray-100'
-                    }`}>
-                      {isCurrent ? (
-                        <div className="w-4 h-4 border-2 border-gray-300 border-t-[#1A1A1A] rounded-full animate-spin" />
-                      ) : (
-                        <StepIcon icon={step.icon} done={isDone} />
-                      )}
+                  <div key={i} className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-500 ${!isVisible ? 'opacity-0 translate-y-2' : ''} ${isCurrent ? 'bg-[#F3F4F6]' : isDone ? 'bg-emerald-50' : 'bg-[#F9FAFB]'}`}>
+                    <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${isDone ? 'bg-emerald-100' : isCurrent ? 'bg-white' : 'bg-gray-100'}`}>
+                      {isCurrent ? <div className="w-4 h-4 border-2 border-gray-300 border-t-[#1A1A1A] rounded-full animate-spin" /> : <StepIcon icon={step.icon} done={isDone} />}
                     </div>
-                    <span className={`text-sm transition-colors ${
-                      isCurrent ? 'font-medium text-gray-900' : isDone ? 'text-gray-600' : 'text-gray-400'
-                    }`}>
-                      {step.label}
-                    </span>
+                    <span className={`text-sm transition-colors ${isCurrent ? 'font-medium text-gray-900' : isDone ? 'text-gray-600' : 'text-gray-400'}`}>{step.label}</span>
                     {isCurrent && (
                       <div className="ml-auto flex gap-0.5">
                         <div className="w-1.5 h-1.5 bg-[#1A1A1A] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -308,12 +269,7 @@ export default function RapportClient({ chantier, rapport: initialRapport }: Rap
             </div>
             <p className="text-gray-900 text-lg font-medium mb-1">Erreur de génération</p>
             <p className="text-gray-400 text-sm mb-6">{error}</p>
-            <button
-              onClick={handleGenerate}
-              className="h-12 px-6 btn-primary font-semibold rounded-xl transition-transform"
-            >
-              Réessayer
-            </button>
+            <button onClick={handleGenerate} className="h-12 px-6 btn-primary font-semibold rounded-xl transition-transform">Réessayer</button>
           </div>
         )}
 
@@ -325,33 +281,21 @@ export default function RapportClient({ chantier, rapport: initialRapport }: Rap
 
       {/* Barre d'actions */}
       {contenu && !generating && (
-        <div
-          className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-gray-100 px-4 py-3 z-20"
-          style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
-        >
+        <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-gray-100 px-4 py-3 z-20" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
           <div className="max-w-lg mx-auto flex gap-2">
-            <button
-              onClick={handleDownloadPdf}
-              disabled={downloading}
-              className="flex-1 h-12 btn-secondary font-semibold rounded-xl active:scale-[0.97] disabled:opacity-50 transition-all flex items-center justify-center gap-2 text-sm"
-            >
+            <button onClick={handleDownloadPdf} disabled={downloading} className="flex-1 h-12 btn-secondary font-semibold rounded-xl active:scale-[0.97] disabled:opacity-50 transition-all flex items-center justify-center gap-2 text-sm">
               <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
               {downloading ? 'Export…' : 'PDF'}
             </button>
-            <button
-              onClick={handleShare}
-              className="h-12 w-12 btn-tertiary rounded-xl flex items-center justify-center transition-all"
-            >
+            {/* Bouton partage → ouvre le bottom sheet */}
+            <button onClick={() => setShowShareSheet(true)} className="h-12 w-12 btn-tertiary rounded-xl flex items-center justify-center transition-all">
               <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
               </svg>
             </button>
-            <button
-              onClick={handleGenerate}
-              className="h-12 w-12 btn-tertiary rounded-xl flex items-center justify-center transition-all"
-            >
+            <button onClick={handleGenerate} className="h-12 w-12 btn-tertiary rounded-xl flex items-center justify-center transition-all">
               <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
@@ -360,10 +304,86 @@ export default function RapportClient({ chantier, rapport: initialRapport }: Rap
         </div>
       )}
 
+      {/* Bottom sheet partage */}
+      {showShareSheet && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setShowShareSheet(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative bg-white w-full max-w-lg rounded-t-2xl shadow-2xl animate-slide-up" style={{ paddingBottom: 'max(24px, env(safe-area-inset-bottom))' }} onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 pt-4">
+              <p className="text-sm text-gray-400 text-center mb-3">Partager le rapport</p>
+
+              {/* Google Drive */}
+              <button onClick={handleDriveClick} className="w-full h-14 btn-secondary rounded-xl font-semibold text-base flex items-center justify-center gap-3 active:scale-[0.97] transition-all mb-3">
+                <span className="text-xl">☁️</span>
+                {driveStatus === 'uploading' ? (
+                  <span className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Envoi en cours…
+                  </span>
+                ) : driveStatus === 'success' ? (
+                  <span className="flex items-center gap-2 text-emerald-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    Enregistré dans Drive
+                  </span>
+                ) : driveStatus === 'error' ? (
+                  <span className="text-red-400">Erreur — Réessayer</span>
+                ) : (
+                  'Envoyer vers Google Drive'
+                )}
+              </button>
+
+              {/* Lien Drive si succès */}
+              {driveStatus === 'success' && driveLink && (
+                <a href={driveLink} target="_blank" rel="noopener noreferrer" className="block text-center text-sm text-emerald-600 font-medium mb-3 active:text-emerald-700">
+                  Ouvrir dans Drive →
+                </a>
+              )}
+
+              {/* Partage natif */}
+              <button onClick={handleNativeShare} className="w-full h-14 btn-tertiary rounded-xl font-semibold text-base flex items-center justify-center gap-3 transition-all mb-2">
+                <span className="text-xl">📤</span>
+                Partager le PDF
+              </button>
+
+              <button onClick={() => { setShowShareSheet(false); setDriveStatus('idle'); }} className="w-full h-12 text-gray-500 font-medium text-sm rounded-xl active:bg-gray-100 transition-colors">
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale connexion Google Drive */}
+      {showDriveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 backdrop-blur-sm">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowDriveModal(false)} />
+          <div className="relative bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-scale-in">
+            <div className="text-center mb-5">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4" style={{ background: 'linear-gradient(135deg, #D1FAE5, #A7F3D0)' }}>
+                <span className="text-3xl">☁️</span>
+              </div>
+              <h2 className="text-xl font-bold text-gray-900">Connecter Google Drive</h2>
+            </div>
+            <p className="text-sm text-gray-600 text-center mb-2">
+              Tous vos rapports seront automatiquement enregistrés dans un dossier <strong>&quot;Assistant de Visite - Compte-rendu&quot;</strong> dans votre Google Drive.
+            </p>
+            <p className="text-xs text-gray-400 text-center mb-6">
+              L&apos;application n&apos;accède qu&apos;aux fichiers qu&apos;elle crée. Vos autres fichiers restent privés.
+            </p>
+            <button onClick={handleConnectDrive} className="w-full h-12 btn-primary font-semibold rounded-xl transition-transform mb-3">
+              Connecter mon Drive
+            </button>
+            <button onClick={() => setShowDriveModal(false)} className="w-full h-12 bg-[#F3F4F6] text-gray-500 font-medium rounded-xl active:bg-gray-200 transition-colors">
+              Plus tard
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Toast */}
       {shareToast && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-[#1A1A1A] text-white px-4 py-2 rounded-xl text-sm shadow-lg z-50 animate-fade-in">
-          Lien copié dans le presse-papier
+          {shareToast}
         </div>
       )}
     </div>

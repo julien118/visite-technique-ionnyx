@@ -16,28 +16,22 @@ export default async function RapportPage({ params }: PageProps) {
     redirect('/login');
   }
 
-  // Récupérer le chantier
-  const { data: chantier, error: chantierError } = await supabase
-    .from('chantiers')
-    .select('*')
-    .eq('id', id)
-    .single();
+  // Récupérer le chantier + profil en parallèle
+  const [{ data: chantier, error: chantierError }, { data: rapport }, { data: profile }] = await Promise.all([
+    supabase.from('chantiers').select('*').eq('id', id).single(),
+    supabase.from('rapports').select('*').eq('chantier_id', id).single(),
+    supabase.from('profiles').select('google_refresh_token').eq('id', user.id).single(),
+  ]);
 
   if (chantierError || !chantier) {
     notFound();
   }
 
-  // Récupérer le rapport s'il existe
-  const { data: rapport } = await supabase
-    .from('rapports')
-    .select('*')
-    .eq('chantier_id', id)
-    .single();
-
   return (
     <RapportClient
       chantier={chantier as Chantier}
       rapport={(rapport as Rapport) || null}
+      hasDriveConnected={!!profile?.google_refresh_token}
     />
   );
 }
