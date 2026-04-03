@@ -84,8 +84,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
   const [processing, setProcessing] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const mainRef = useRef<HTMLElement>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
 
   const [lastPhotoItem, setLastPhotoItem] = useState<CaptureItemType | null>(null);
@@ -101,12 +100,15 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
   const nextPosition = items.length > 0 ? Math.max(...items.map((i) => i.position)) + 1 : 1;
   const displayGroups = buildDisplayGroups(items);
 
-  const scrollToBottom = useCallback(() => {
-    if (!isNearBottomRef.current) return;
-    // requestAnimationFrame pour s'assurer que le DOM est à jour
-    requestAnimationFrame(() => {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    });
+  // Scroll vers le bas — cible directement scrollTop du conteneur (fiable iOS Safari)
+  const scrollToBottom = useCallback((force = false) => {
+    if (!force && !isNearBottomRef.current) return;
+    setTimeout(() => {
+      const el = mainRef.current;
+      if (el) {
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      }
+    }, 120);
   }, []);
 
   // Détecter si l'utilisateur est près du bas
@@ -214,9 +216,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
 
       const captureItem = newItem as CaptureItemType;
       setItems((prev) => [...prev, captureItem]);
-
-      // Forcer le scroll vers le bas après ajout confirmé
-      isNearBottomRef.current = true;
+      scrollToBottom(true);
 
       const formData = new FormData();
       formData.append('file', audioBlob, 'audio.webm');
@@ -279,9 +279,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
 
       const photoItem = newItem as CaptureItemType;
       setItems((prev) => [...prev, photoItem]);
-
-      // Forcer le scroll vers le bas après ajout confirmé
-      isNearBottomRef.current = true;
+      scrollToBottom(true);
 
       startDescribeCountdown(photoItem);
     } catch (err) {
@@ -367,7 +365,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
   }
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'linear-gradient(180deg, #F8FAFC 0%, #F0FDF4 100%)' }}>
+    <div className="h-screen flex flex-col overflow-hidden" style={{ background: 'linear-gradient(180deg, #F8FAFC 0%, #F0FDF4 100%)' }}>
       {/* Header */}
       <header className="bg-[#1A1A1A] text-white px-4 py-3 sticky top-0 z-20">
         <div className="max-w-lg mx-auto">
@@ -401,7 +399,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
       </header>
 
       {/* Timeline */}
-      <main ref={mainRef} className="flex-1 max-w-lg mx-auto w-full px-4 py-4 pb-28 overflow-y-auto">
+      <div ref={mainRef} className="flex-1 max-w-lg mx-auto w-full px-4 py-4 pb-36 overflow-y-auto">
         {items.length === 0 && !processing ? (
           <div className="text-center py-16">
             <div className="inline-flex items-center justify-center gap-3 mb-6">
@@ -459,8 +457,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
           </div>
         )}
 
-        <div ref={bottomRef} />
-      </main>
+      </div>
 
       {/* Barre d'action */}
       <div
