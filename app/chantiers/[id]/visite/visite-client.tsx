@@ -367,7 +367,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
   return (
     <div className="h-screen flex flex-col overflow-hidden" style={{ background: 'linear-gradient(180deg, #F8FAFC 0%, #F0FDF4 100%)' }}>
       {/* Header */}
-      <header className="bg-[#1A1A1A] text-white px-4 py-3 sticky top-0 z-20">
+      <header className="bg-[#1A1A1A] text-white px-4 py-3 shrink-0 z-20">
         <div className="max-w-lg mx-auto">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
