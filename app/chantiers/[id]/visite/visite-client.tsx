@@ -349,7 +349,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
             </div>
           ) : (
             <p className="text-xs text-emerald-400 mt-1">
-              {items.length} élément{items.length !== 1 ? 's' : ''} — {photoCount} photo{photoCount !== 1 ? 's' : ''}, {vocalCount} vocal{vocalCount !== 1 ? 'aux' : ''}
+              {items.length} élément{items.length !== 1 ? 's' : ''} — {photoCount} photo{photoCount !== 1 ? 's' : ''}, {vocalCount} {vocalCount <= 1 ? 'vocal' : 'vocaux'}
             </p>
           )}
         </div>
