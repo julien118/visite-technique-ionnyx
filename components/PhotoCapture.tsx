@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 
 interface PhotoCaptureProps {
   onPhotoTaken: (file: File) => void;
@@ -9,10 +9,22 @@ interface PhotoCaptureProps {
 }
 
 export default function PhotoCapture({ onPhotoTaken, disabled, compact }: PhotoCaptureProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const [showSheet, setShowSheet] = useState(false);
 
   function handleClick() {
-    inputRef.current?.click();
+    setShowSheet(true);
+  }
+
+  function handleCamera() {
+    setShowSheet(false);
+    cameraInputRef.current?.click();
+  }
+
+  function handleGallery() {
+    setShowSheet(false);
+    galleryInputRef.current?.click();
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -23,17 +35,70 @@ export default function PhotoCapture({ onPhotoTaken, disabled, compact }: PhotoC
     }
   }
 
+  const inputs = (
+    <>
+      {/* Appareil photo direct */}
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handleChange}
+        className="hidden"
+      />
+      {/* Galerie / pellicule (pas de capture) */}
+      <input
+        ref={galleryInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleChange}
+        className="hidden"
+      />
+    </>
+  );
+
+  const bottomSheet = showSheet && (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setShowSheet(false)}>
+      <div className="absolute inset-0 bg-black/40" />
+      <div
+        className="relative bg-white w-full max-w-lg rounded-t-2xl shadow-2xl animate-slide-up"
+        style={{ paddingBottom: 'max(24px, env(safe-area-inset-bottom))' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-4 pt-4">
+          <p className="text-sm text-gray-400 text-center mb-3">Ajouter une photo</p>
+
+          <button
+            onClick={handleCamera}
+            className="w-full h-14 btn-secondary rounded-xl font-semibold text-base flex items-center justify-center gap-3 active:scale-[0.97] transition-all mb-3"
+          >
+            <span className="text-xl">📷</span>
+            Prendre une photo
+          </button>
+
+          <button
+            onClick={handleGallery}
+            className="w-full h-14 btn-tertiary rounded-xl font-semibold text-base flex items-center justify-center gap-3 transition-all mb-2"
+          >
+            <span className="text-xl">🖼️</span>
+            Choisir depuis la galerie
+          </button>
+
+          <button
+            onClick={() => setShowSheet(false)}
+            className="w-full h-12 text-gray-500 font-medium text-sm rounded-xl active:bg-gray-100 transition-colors"
+          >
+            Annuler
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   if (compact) {
     return (
       <>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handleChange}
-          className="hidden"
-        />
+        {inputs}
         <button
           onClick={handleClick}
           disabled={disabled}
@@ -44,20 +109,14 @@ export default function PhotoCapture({ onPhotoTaken, disabled, compact }: PhotoC
           </svg>
           Nouvelle photo
         </button>
+        {bottomSheet}
       </>
     );
   }
 
   return (
     <>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={handleChange}
-        className="hidden"
-      />
+      {inputs}
       <button
         onClick={handleClick}
         disabled={disabled}
@@ -69,6 +128,7 @@ export default function PhotoCapture({ onPhotoTaken, disabled, compact }: PhotoC
         </svg>
         Photo
       </button>
+      {bottomSheet}
     </>
   );
 }
