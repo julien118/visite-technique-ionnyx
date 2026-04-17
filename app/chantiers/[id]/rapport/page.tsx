@@ -16,11 +16,10 @@ export default async function RapportPage({ params }: PageProps) {
     redirect('/login');
   }
 
-  // Récupérer le chantier + profil en parallèle
   const [{ data: chantier, error: chantierError }, { data: rapport }, { data: profile }] = await Promise.all([
     supabase.from('chantiers').select('*').eq('id', id).single(),
     supabase.from('rapports').select('*').eq('chantier_id', id).single(),
-    supabase.from('profiles').select('google_refresh_token').eq('id', user.id).single(),
+    supabase.from('profiles').select('pcloud_auth_token, pcloud_email').eq('id', user.id).single(),
   ]);
 
   if (chantierError || !chantier) {
@@ -31,7 +30,8 @@ export default async function RapportPage({ params }: PageProps) {
     <RapportClient
       chantier={chantier as Chantier}
       rapport={(rapport as Rapport) || null}
-      hasDriveConnected={!!profile?.google_refresh_token}
+      hasPCloudConnected={!!profile?.pcloud_auth_token}
+      pcloudEmail={profile?.pcloud_email || null}
     />
   );
 }

@@ -9,7 +9,8 @@ import ReportView from '@/components/ReportView';
 interface RapportClientProps {
   chantier: Chantier;
   rapport: Rapport | null;
-  hasDriveConnected: boolean;
+  hasPCloudConnected: boolean;
+  pcloudEmail: string | null;
 }
 
 const GENERATION_STEPS = [
@@ -39,7 +40,7 @@ function StepIcon({ icon, done }: { icon: string; done: boolean }) {
   return <>{icons[icon] || null}</>;
 }
 
-export default function RapportClient({ chantier, rapport: initialRapport, hasDriveConnected }: RapportClientProps) {
+export default function RapportClient({ chantier, rapport: initialRapport, hasPCloudConnected, pcloudEmail }: RapportClientProps) {
   const router = useRouter();
   const supabase = createClient();
   const [rapport, setRapport] = useState(initialRapport);
@@ -49,10 +50,15 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasDr
   const stepIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasStartedRef = useRef(false);
 
-  // Drive
-  const [showDriveModal, setShowDriveModal] = useState(false);
-  const [driveStatus, setDriveStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
-  const [driveLink, setDriveLink] = useState('');
+  // pCloud
+  const [showPCloudModal, setShowPCloudModal] = useState(false);
+  const [pcloudStatus, setPCloudStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [pcloudLink, setPCloudLink] = useState('');
+  const [pcloudConnected, setPCloudConnected] = useState(hasPCloudConnected);
+  const [connectEmail, setConnectEmail] = useState(pcloudEmail || '');
+  const [connectPassword, setConnectPassword] = useState('');
+  const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState('');
 
   // PDF preview
   const [showPdfPreview, setShowPdfPreview] = useState(false);
@@ -182,53 +188,74 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasDr
     }
   }
 
-  // === Google Drive ===
-  function handleDriveClick() {
-    if (driveStatus === 'success') return; // Déjà envoyé
-    if (driveStatus === 'error') { uploadToDrive(); return; } // Retry
-    if (hasDriveConnected) {
-      uploadToDrive();
+  // === pCloud ===
+  function handlePCloudClick() {
+    if (pcloudStatus === 'success') return;
+    if (pcloudStatus === 'error') { uploadToPCloud(); return; }
+    if (pcloudConnected) {
+      uploadToPCloud();
     } else {
-      setShowDriveModal(true);
+      setShowPCloudModal(true);
     }
   }
 
-  function handleConnectDrive() {
-    setShowDriveModal(false);
-    window.location.href = `/api/auth/google?chantierId=${chantier.id}`;
+  async function handleConnectPCloud(e: React.FormEvent) {
+    e.preventDefault();
+    setConnecting(true);
+    setConnectError('');
+    try {
+      const response = await fetch('/api/auth/pcloud/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: connectEmail, password: connectPassword, region: 'EU' }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setConnectError(data.error || 'Connexion échouée');
+        return;
+      }
+      setConnectPassword('');
+      setPCloudConnected(true);
+      setShowPCloudModal(false);
+      uploadToPCloud();
+    } catch {
+      setConnectError('Erreur réseau');
+    } finally {
+      setConnecting(false);
+    }
   }
 
-  async function uploadToDrive() {
-    setDriveStatus('uploading');
+  async function uploadToPCloud() {
+    setPCloudStatus('uploading');
     try {
-      const response = await fetch('/api/drive/upload-rapport', {
+      const response = await fetch('/api/pcloud/upload-rapport', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chantierId: chantier.id }),
       });
       if (!response.ok) {
         const data = await response.json();
-        if (data.error === 'Google Drive non connecté') {
-          setDriveStatus('idle');
-          setShowDriveModal(true);
+        if (data.error === 'pCloud non connecté') {
+          setPCloudConnected(false);
+          setPCloudStatus('idle');
+          setShowPCloudModal(true);
           return;
         }
-        throw new Error(data.error || 'Erreur Drive');
+        throw new Error(data.error || 'Erreur pCloud');
       }
-      const { webViewLink } = await response.json();
-      setDriveLink(webViewLink || '');
-      setDriveStatus('success');
+      const { publicLink } = await response.json();
+      setPCloudLink(publicLink || '');
+      setPCloudStatus('success');
     } catch (err) {
-      console.error('Erreur Drive:', err);
-      setDriveStatus('error');
+      console.error('Erreur pCloud:', err);
+      setPCloudStatus('error');
     }
   }
 
-  // === Drive button content ===
-  function renderDriveButton() {
+  function renderPCloudButton() {
     const baseClass = 'w-full h-14 rounded-xl font-semibold text-base flex items-center justify-center gap-3 active:scale-[0.97] transition-all';
 
-    if (driveStatus === 'uploading') {
+    if (pcloudStatus === 'uploading') {
       return (
         <button disabled className={`${baseClass} btn-primary opacity-80`}>
           <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -236,34 +263,33 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasDr
         </button>
       );
     }
-    if (driveStatus === 'success') {
+    if (pcloudStatus === 'success') {
       return (
         <div>
           <button disabled className={`${baseClass} bg-emerald-700 text-white`}>
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-            Enregistré dans Drive
+            Enregistré dans pCloud
           </button>
-          {driveLink && (
-            <a href={driveLink} target="_blank" rel="noopener noreferrer" className="block text-center text-sm text-emerald-600 font-medium mt-2 active:text-emerald-700">
-              Ouvrir dans Drive →
+          {pcloudLink && (
+            <a href={pcloudLink} target="_blank" rel="noopener noreferrer" className="block text-center text-sm text-emerald-600 font-medium mt-2 active:text-emerald-700">
+              Ouvrir dans pCloud →
             </a>
           )}
         </div>
       );
     }
-    if (driveStatus === 'error') {
+    if (pcloudStatus === 'error') {
       return (
-        <button onClick={handleDriveClick} className={`${baseClass} bg-red-500 text-white`}>
+        <button onClick={handlePCloudClick} className={`${baseClass} bg-red-500 text-white`}>
           <span>⚠️</span>
           Erreur — Réessayer
         </button>
       );
     }
-    // idle
     return (
-      <button onClick={handleDriveClick} className={`${baseClass} btn-primary`} style={{ boxShadow: '0 4px 15px rgba(16,185,129,0.3)' }}>
+      <button onClick={handlePCloudClick} className={`${baseClass} btn-primary`} style={{ boxShadow: '0 4px 15px rgba(16,185,129,0.3)' }}>
         <span className="text-xl">☁️</span>
-        Envoyer vers Google Drive
+        Envoyer vers pCloud
       </button>
     );
   }
@@ -355,8 +381,8 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasDr
           }}
         >
           <div className="max-w-lg mx-auto w-full flex flex-col gap-2">
-            {/* Niveau 1 — Google Drive (principal) */}
-            {renderDriveButton()}
+            {/* Niveau 1 — pCloud (principal) */}
+            {renderPCloudButton()}
 
             {/* Niveau 2 — Prévisualiser le PDF */}
             <button
@@ -419,29 +445,77 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasDr
         </div>
       )}
 
-      {/* Modale connexion Google Drive */}
-      {showDriveModal && (
+      {/* Modale connexion pCloud */}
+      {showPCloudModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4 backdrop-blur-sm">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setShowDriveModal(false)} />
+          <div className="absolute inset-0 bg-black/60" onClick={() => !connecting && setShowPCloudModal(false)} />
           <div className="relative bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-scale-in">
             <div className="text-center mb-5">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4" style={{ background: 'linear-gradient(135deg, #D1FAE5, #A7F3D0)' }}>
                 <span className="text-3xl">☁️</span>
               </div>
-              <h2 className="text-xl font-bold text-gray-900">Connecter Google Drive</h2>
+              <h2 className="text-xl font-bold text-gray-900">Connecter pCloud</h2>
             </div>
             <p className="text-sm text-gray-600 text-center mb-2">
-              Tous vos rapports seront automatiquement enregistrés dans un dossier <strong>&quot;Assistant de Visite - Compte-rendu&quot;</strong> dans votre Google Drive.
+              Vos rapports seront automatiquement enregistrés dans le dossier <strong>2 ETUDES-DEVIS</strong> de votre pCloud.
             </p>
-            <p className="text-xs text-gray-400 text-center mb-6">
-              L&apos;application n&apos;accède qu&apos;aux fichiers qu&apos;elle crée. Vos autres fichiers restent privés.
+            <p className="text-xs text-gray-400 text-center mb-5">
+              Votre mot de passe n&apos;est jamais stocké : il est échangé contre un jeton sécurisé lors de la connexion.
             </p>
-            <button onClick={handleConnectDrive} className="w-full h-12 btn-primary font-semibold rounded-xl transition-transform mb-3">
-              Connecter mon Drive
-            </button>
-            <button onClick={() => setShowDriveModal(false)} className="w-full h-12 bg-[#F3F4F6] text-gray-500 font-medium rounded-xl active:bg-gray-200 transition-colors">
-              Plus tard
-            </button>
+
+            <form onSubmit={handleConnectPCloud} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Email pCloud</label>
+                <input
+                  type="email"
+                  value={connectEmail}
+                  onChange={(e) => setConnectEmail(e.target.value)}
+                  required
+                  autoComplete="username"
+                  className="w-full h-11 px-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  placeholder="email@exemple.com"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Mot de passe pCloud</label>
+                <input
+                  type="password"
+                  value={connectPassword}
+                  onChange={(e) => setConnectPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                  className="w-full h-11 px-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  placeholder="••••••••"
+                />
+              </div>
+
+              {connectError && (
+                <p className="text-xs text-red-500 text-center">{connectError}</p>
+              )}
+
+              <button
+                type="submit"
+                disabled={connecting || !connectEmail || !connectPassword}
+                className="w-full h-12 btn-primary font-semibold rounded-xl transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {connecting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Connexion…
+                  </>
+                ) : (
+                  'Connecter pCloud'
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPCloudModal(false)}
+                disabled={connecting}
+                className="w-full h-12 bg-[#F3F4F6] text-gray-500 font-medium rounded-xl active:bg-gray-200 transition-colors"
+              >
+                Plus tard
+              </button>
+            </form>
           </div>
         </div>
       )}
