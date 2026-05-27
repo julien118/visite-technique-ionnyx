@@ -72,6 +72,7 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
   // Sauvegarde photos vers pellicule
   const [savingPhotos, setSavingPhotos] = useState(false);
   const [showSavePhotosModal, setShowSavePhotosModal] = useState(false);
+  const [confirmingSkipPhotos, setConfirmingSkipPhotos] = useState(false);
   const savePhotosPromptHandledRef = useRef(false);
   // Fallback client : si le fetch serveur renvoie 0 (timing, cookies SSR…),
   // on retente côté client pour que la popup puisse s'afficher.
@@ -221,6 +222,15 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
   function dismissSavePhotosPrompt() {
     savePhotosPromptHandledRef.current = true;
     setShowSavePhotosModal(false);
+    setConfirmingSkipPhotos(false);
+  }
+
+  function requestSkipConfirmation() {
+    setConfirmingSkipPhotos(true);
+  }
+
+  function cancelSkipConfirmation() {
+    setConfirmingSkipPhotos(false);
   }
 
   // === Enregistrement photos dans la pellicule via feuille de partage native ===
@@ -460,54 +470,86 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
         )}
       </main>
 
-      {/* ===== POPUP "Enregistrer photos dans pellicule" PENDANT LE LOADER ===== */}
-      {showSavePhotosModal && generating && effectiveCapturePhotoUrls.length > 0 && (
+      {/* ===== POPUP "Enregistrer photos dans pellicule" ===== */}
+      {/* Reste affichée même après la fin du loader. Ne se ferme QUE via les boutons. */}
+      {showSavePhotosModal && effectiveCapturePhotoUrls.length > 0 && (
         <div className="fixed inset-0 z-30 flex items-center justify-center px-4">
-          {/* Backdrop léger : loader visible derrière */}
-          <div
-            className="absolute inset-0 bg-black/30 backdrop-blur-[2px]"
-            onClick={dismissSavePhotosPrompt}
-          />
+          {/* Backdrop non cliquable : on force l'utilisateur à choisir explicitement */}
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" />
           {/* Carte */}
           <div className="relative bg-white rounded-2xl shadow-2xl p-5 max-w-sm w-full animate-scale-in">
-            <div className="text-center mb-4">
-              <div
-                className="inline-flex w-14 h-14 rounded-full items-center justify-center mb-3"
-                style={{ background: 'linear-gradient(135deg, #D1FAE5, #A7F3D0)' }}
-              >
-                <span className="text-2xl">🖼️</span>
-              </div>
-              <h3 className="font-bold text-gray-900 text-base mb-1">
-                Pendant la génération…
-              </h3>
-              <p className="text-sm text-gray-600">
-                Vous voulez enregistrer vos {effectiveCapturePhotoUrls.length} photo{effectiveCapturePhotoUrls.length > 1 ? 's' : ''} dans votre pellicule iPhone&nbsp;?
-              </p>
-            </div>
-            <button
-              onClick={handleSavePhotosToGallery}
-              disabled={savingPhotos}
-              className="w-full h-12 btn-primary rounded-xl font-semibold text-sm flex items-center justify-center gap-2 mb-2 disabled:opacity-60 active:scale-[0.97] transition-all"
-            >
-              {savingPhotos ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Préparation…
-                </>
-              ) : (
-                <>
-                  <span className="text-base">📥</span>
-                  Oui, enregistrer dans ma pellicule
-                </>
-              )}
-            </button>
-            <button
-              onClick={dismissSavePhotosPrompt}
-              disabled={savingPhotos}
-              className="w-full h-10 text-gray-500 text-sm font-medium rounded-xl active:bg-gray-100 transition-colors disabled:opacity-50"
-            >
-              Plus tard
-            </button>
+            {!confirmingSkipPhotos ? (
+              <>
+                <div className="text-center mb-4">
+                  <div
+                    className="inline-flex w-14 h-14 rounded-full items-center justify-center mb-3"
+                    style={{ background: 'linear-gradient(135deg, #D1FAE5, #A7F3D0)' }}
+                  >
+                    <span className="text-2xl">🖼️</span>
+                  </div>
+                  <h3 className="font-bold text-gray-900 text-base mb-1">
+                    Enregistrer vos photos&nbsp;?
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    Vous voulez enregistrer vos {effectiveCapturePhotoUrls.length} photo{effectiveCapturePhotoUrls.length > 1 ? 's' : ''} de la visite dans votre pellicule iPhone&nbsp;?
+                  </p>
+                </div>
+                <button
+                  onClick={handleSavePhotosToGallery}
+                  disabled={savingPhotos}
+                  className="w-full h-12 btn-primary rounded-xl font-semibold text-sm flex items-center justify-center gap-2 mb-2 disabled:opacity-60 active:scale-[0.97] transition-all"
+                >
+                  {savingPhotos ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Préparation…
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-base">📥</span>
+                      Oui, enregistrer dans ma pellicule
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={requestSkipConfirmation}
+                  disabled={savingPhotos}
+                  className="w-full h-10 text-gray-500 text-sm font-medium rounded-xl active:bg-gray-100 transition-colors disabled:opacity-50"
+                >
+                  Plus tard
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="text-center mb-4">
+                  <div
+                    className="inline-flex w-14 h-14 rounded-full items-center justify-center mb-3"
+                    style={{ background: 'linear-gradient(135deg, #FEF3C7, #FDE68A)' }}
+                  >
+                    <span className="text-2xl">⚠️</span>
+                  </div>
+                  <h3 className="font-bold text-gray-900 text-base mb-1">
+                    Êtes-vous sûr·e&nbsp;?
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    Vos {effectiveCapturePhotoUrls.length} photo{effectiveCapturePhotoUrls.length > 1 ? 's' : ''} ne ser{effectiveCapturePhotoUrls.length > 1 ? 'ont' : 'a'} pas enregistré{effectiveCapturePhotoUrls.length > 1 ? 'es' : 'e'} dans votre pellicule iPhone.
+                  </p>
+                </div>
+                <button
+                  onClick={cancelSkipConfirmation}
+                  className="w-full h-12 btn-primary rounded-xl font-semibold text-sm flex items-center justify-center gap-2 mb-2 active:scale-[0.97] transition-all"
+                >
+                  <span className="text-base">↩️</span>
+                  Revenir en arrière
+                </button>
+                <button
+                  onClick={dismissSavePhotosPrompt}
+                  className="w-full h-10 text-gray-500 text-sm font-medium rounded-xl active:bg-gray-100 transition-colors"
+                >
+                  Oui, ne pas enregistrer
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
