@@ -112,6 +112,14 @@ export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
     }
   }, [supabase, userId]);
 
+  // Préchargement des routes vers lesquelles l'utilisateur va probablement naviguer
+  // depuis ce formulaire : visite et rapport. Re-prefetch quand chantierId est défini.
+  useEffect(() => {
+    if (!chantierId) return;
+    router.prefetch(`/chantiers/${chantierId}/visite`);
+    router.prefetch(`/chantiers/${chantierId}/rapport`);
+  }, [chantierId, router]);
+
   useEffect(() => {
     if (isNew && !chantierId && !form.client_nom.trim()) return;
 
@@ -266,7 +274,7 @@ export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
         <div className="space-y-6">
           {/* Prénom + Nom */}
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="min-w-0">
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Prénom client *
               </label>
@@ -276,10 +284,10 @@ export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
                 onChange={(e) => updateField('client_prenom', e.target.value)}
                 placeholder="Jean"
                 autoComplete="given-name"
-                className="w-full min-h-[48px] h-12 px-4 text-base rounded-xl input-ionnyx"
+                className="w-full min-w-0 min-h-[48px] h-12 px-4 text-base rounded-xl input-ionnyx"
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Nom client *
               </label>
@@ -289,7 +297,7 @@ export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
                 onChange={(e) => updateField('client_nom', e.target.value)}
                 placeholder="Dupont"
                 autoComplete="family-name"
-                className="w-full min-h-[48px] h-12 px-4 text-base rounded-xl input-ionnyx"
+                className="w-full min-w-0 min-h-[48px] h-12 px-4 text-base rounded-xl input-ionnyx"
               />
             </div>
           </div>
@@ -351,7 +359,7 @@ export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Date et heure de la visite
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2">
               <input
                 type="date"
                 value={getDatePart(form.date_visite)}
@@ -359,7 +367,7 @@ export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
                   const time = getTimePart(form.date_visite);
                   updateField('date_visite', `${e.target.value}T${time}`);
                 }}
-                className="w-full min-h-[48px] h-12 px-4 text-base rounded-xl input-ionnyx"
+                className="w-full min-w-0 min-h-[48px] h-12 px-3 text-base rounded-xl input-ionnyx"
               />
               <input
                 type="time"
@@ -368,7 +376,7 @@ export default function ChantierForm({ chantier, userId }: ChantierFormProps) {
                   const date = getDatePart(form.date_visite);
                   updateField('date_visite', `${date}T${e.target.value}`);
                 }}
-                className="w-full min-h-[48px] h-12 px-4 text-base rounded-xl input-ionnyx"
+                className="w-full min-w-0 min-h-[48px] h-12 px-3 text-base rounded-xl input-ionnyx"
               />
             </div>
           </div>

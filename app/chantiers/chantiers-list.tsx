@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Chantier, ChantierStatut } from '@/lib/types';
 import ChantierCard from '@/components/ChantierCard';
 import { useRouter } from 'next/navigation';
@@ -17,10 +17,8 @@ type FilterTab = 'tous' | ChantierStatut;
 
 const TABS: { key: FilterTab; label: string }[] = [
   { key: 'tous', label: 'Tous' },
-  { key: 'planifie', label: 'Planifiés' },
   { key: 'en_cours', label: 'En cours' },
-  { key: 'termine', label: 'Finis' },
-  { key: 'rapport_genere', label: 'Rapports' },
+  { key: 'rapport_genere', label: 'Rapport fini' },
 ];
 
 const STATUT_PRIORITY: Record<ChantierStatut, number> = {
@@ -48,6 +46,13 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
   const [search, setSearch] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+
+  // Préchargement des routes les plus tapées : nouvelle visite + détail des chantiers existants.
+  // Les pages sont prêtes en cache RSC quand Hendrix appuie : navigation perçue instantanée.
+  useEffect(() => {
+    router.prefetch('/chantiers/nouveau');
+    initialChantiers.slice(0, 12).forEach((c) => router.prefetch(`/chantiers/${c.id}`));
+  }, [router, initialChantiers]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { tous: chantiers.length };

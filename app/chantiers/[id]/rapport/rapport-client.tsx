@@ -11,6 +11,7 @@ interface RapportClientProps {
   rapport: Rapport | null;
   hasPCloudConnected: boolean;
   pcloudEmail: string | null;
+  capturePhotoUrls: string[];
 }
 
 const GENERATION_STEPS = [
@@ -40,7 +41,7 @@ function StepIcon({ icon, done }: { icon: string; done: boolean }) {
   return <>{icons[icon] || null}</>;
 }
 
-export default function RapportClient({ chantier, rapport: initialRapport, hasPCloudConnected, pcloudEmail }: RapportClientProps) {
+export default function RapportClient({ chantier, rapport: initialRapport, hasPCloudConnected, pcloudEmail, capturePhotoUrls }: RapportClientProps) {
   const router = useRouter();
   const supabase = createClient();
   const [rapport, setRapport] = useState(initialRapport);
@@ -68,7 +69,17 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
   // Toast
   const [shareToast, setShareToast] = useState('');
 
+  // Sauvegarde photos vers pellicule
+  const [savingPhotos, setSavingPhotos] = useState(false);
+  const [showSavePhotosModal, setShowSavePhotosModal] = useState(false);
+  const savePhotosPromptHandledRef = useRef(false);
+
   const contenu = rapport?.contenu_json as RapportContenu | null;
+  // Pendant la génération, on a les URLs depuis capture_items (props serveur).
+  // Une fois le rapport généré, on utilise celles du rapport (cohérent avec ce qui est affiché).
+  const allPhotoUrls = contenu
+    ? Array.from(new Set(contenu.observations.flatMap((o) => o.photos.map((p) => p.url))))
+    : Array.from(new Set(capturePhotoUrls));
 
   useEffect(() => {
     if (!contenu && !hasStartedRef.current) {
@@ -94,6 +105,15 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
   useEffect(() => {
     return () => { if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl); };
   }, [pdfBlobUrl]);
+
+  // Pendant la génération du rapport : on profite du temps d'attente pour proposer
+  // d'enregistrer les photos dans la pellicule. Une seule proposition par session.
+  useEffect(() => {
+    if (generating && capturePhotoUrls.length > 0 && !savePhotosPromptHandledRef.current) {
+      const t = setTimeout(() => setShowSavePhotosModal(true), 600);
+      return () => clearTimeout(t);
+    }
+  }, [generating, capturePhotoUrls.length]);
 
   async function handleGenerate() {
     setGenerating(true);
@@ -172,6 +192,52 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
     if (pdfBlobUrl) {
       URL.revokeObjectURL(pdfBlobUrl);
       setPdfBlobUrl('');
+    }
+  }
+
+  function dismissSavePhotosPrompt() {
+    savePhotosPromptHandledRef.current = true;
+    setShowSavePhotosModal(false);
+  }
+
+  // === Enregistrement photos dans la pellicule via feuille de partage native ===
+  async function handleSavePhotosToGallery() {
+    if (allPhotoUrls.length === 0 || savingPhotos) return;
+    setSavingPhotos(true);
+    try {
+      const dateStr = new Date(chantier.date_visite).toISOString().slice(0, 10);
+      const files = await Promise.all(
+        allPhotoUrls.map(async (url, i) => {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error('Téléchargement photo échoué');
+          const blob = await res.blob();
+          const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+          return new File([blob], `visite-${dateStr}-photo-${i + 1}.${ext}`, { type: blob.type });
+        })
+      );
+
+      if (typeof navigator !== 'undefined' && navigator.canShare?.({ files })) {
+        try {
+          await navigator.share({
+            files,
+            title: `Photos visite — ${chantier.client_prenom} ${chantier.client_nom}`,
+          });
+          // Partage abouti : on referme la popup et on ne la repropose plus.
+          savePhotosPromptHandledRef.current = true;
+          setShowSavePhotosModal(false);
+        } catch {
+          // Utilisateur a annulé : silencieux, on laisse la popup ouverte.
+        }
+      } else {
+        setShareToast('Fonction disponible uniquement sur iPhone / Android');
+        setTimeout(() => setShareToast(''), 3000);
+      }
+    } catch (err) {
+      console.error('Erreur sauvegarde photos:', err);
+      setShareToast('Erreur — réessayez');
+      setTimeout(() => setShareToast(''), 2500);
+    } finally {
+      setSavingPhotos(false);
     }
   }
 
@@ -371,6 +437,58 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
         )}
       </main>
 
+      {/* ===== POPUP "Enregistrer photos dans pellicule" PENDANT LE LOADER ===== */}
+      {showSavePhotosModal && generating && capturePhotoUrls.length > 0 && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center px-4">
+          {/* Backdrop léger : loader visible derrière */}
+          <div
+            className="absolute inset-0 bg-black/30 backdrop-blur-[2px]"
+            onClick={dismissSavePhotosPrompt}
+          />
+          {/* Carte */}
+          <div className="relative bg-white rounded-2xl shadow-2xl p-5 max-w-sm w-full animate-scale-in">
+            <div className="text-center mb-4">
+              <div
+                className="inline-flex w-14 h-14 rounded-full items-center justify-center mb-3"
+                style={{ background: 'linear-gradient(135deg, #D1FAE5, #A7F3D0)' }}
+              >
+                <span className="text-2xl">🖼️</span>
+              </div>
+              <h3 className="font-bold text-gray-900 text-base mb-1">
+                Pendant la génération…
+              </h3>
+              <p className="text-sm text-gray-600">
+                Vous voulez enregistrer vos {capturePhotoUrls.length} photo{capturePhotoUrls.length > 1 ? 's' : ''} dans votre pellicule iPhone&nbsp;?
+              </p>
+            </div>
+            <button
+              onClick={handleSavePhotosToGallery}
+              disabled={savingPhotos}
+              className="w-full h-12 btn-primary rounded-xl font-semibold text-sm flex items-center justify-center gap-2 mb-2 disabled:opacity-60 active:scale-[0.97] transition-all"
+            >
+              {savingPhotos ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Préparation…
+                </>
+              ) : (
+                <>
+                  <span className="text-base">📥</span>
+                  Oui, enregistrer dans ma pellicule
+                </>
+              )}
+            </button>
+            <button
+              onClick={dismissSavePhotosPrompt}
+              disabled={savingPhotos}
+              className="w-full h-10 text-gray-500 text-sm font-medium rounded-xl active:bg-gray-100 transition-colors disabled:opacity-50"
+            >
+              Plus tard
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ===== NOUVELLE BARRE D'ACTIONS ===== */}
       {contenu && !generating && (
         <div
@@ -414,6 +532,27 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
                 Régénérer
               </button>
             </div>
+
+            {/* Niveau 4 — Enregistrer photos dans pellicule */}
+            {allPhotoUrls.length > 0 && (
+              <button
+                onClick={handleSavePhotosToGallery}
+                disabled={savingPhotos}
+                className="w-full h-11 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all text-gray-600 active:bg-gray-100 disabled:opacity-50"
+              >
+                {savingPhotos ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-700 rounded-full animate-spin" />
+                    Préparation des photos…
+                  </>
+                ) : (
+                  <>
+                    <span className="text-base">🖼️</span>
+                    Enregistrer {allPhotoUrls.length} photo{allPhotoUrls.length > 1 ? 's' : ''} dans ma pellicule
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -516,6 +655,57 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
                 Plus tard
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modale "Enregistrer les photos dans la pellicule" — affichée pendant la génération */}
+      {showSavePhotosModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-scale-in">
+            <div className="text-center mb-4">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full mb-3" style={{ background: 'linear-gradient(135deg, #D1FAE5, #A7F3D0)' }}>
+                <span className="text-2xl">🖼️</span>
+              </div>
+              <h2 className="text-lg font-bold text-gray-900 leading-tight">
+                Enregistrer vos photos<br />dans votre pellicule&nbsp;?
+              </h2>
+              <p className="text-sm text-gray-500 mt-2">
+                {capturePhotoUrls.length} photo{capturePhotoUrls.length > 1 ? 's' : ''} prise{capturePhotoUrls.length > 1 ? 's' : ''} pendant la visite
+              </p>
+            </div>
+
+            <button
+              onClick={async () => {
+                savePhotosPromptHandledRef.current = true;
+                setShowSavePhotosModal(false);
+                await handleSavePhotosToGallery();
+              }}
+              disabled={savingPhotos}
+              className="w-full h-12 btn-primary font-semibold rounded-xl transition-transform disabled:opacity-50 flex items-center justify-center gap-2 mb-2"
+            >
+              {savingPhotos ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Préparation…
+                </>
+              ) : (
+                <>
+                  <span>📥</span>
+                  Oui, enregistrer
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => {
+                savePhotosPromptHandledRef.current = true;
+                setShowSavePhotosModal(false);
+              }}
+              className="w-full h-11 text-gray-500 text-sm font-medium rounded-xl active:bg-gray-100 transition-colors"
+            >
+              Plus tard
+            </button>
           </div>
         </div>
       )}

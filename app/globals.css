@@ -9,6 +9,12 @@
   --foreground: #111827;
 }
 
+html, body {
+  /* Bloque tout scroll horizontal accidentel (iOS Safari : inputs date/time, contenus longs, etc.) */
+  overflow-x: hidden;
+  width: 100%;
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
@@ -21,6 +27,18 @@ body {
 input, select, textarea {
   font-size: 16px;
   font-family: inherit;
+}
+
+/* iOS Safari : les inputs date/time/datetime-local ont une largeur intrinsèque
+   imposée par WebKit (UI natif : texte + icône). On force la contrainte au
+   conteneur parent pour éviter les dépassements en mise en page grille. */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* ===== BOUTONS CTA ===== */

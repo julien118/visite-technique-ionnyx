@@ -20,6 +20,9 @@ export default function ChantierCard({ chantier, onDelete }: ChantierCardProps) 
   const handlePressStart = useCallback(() => {
     didLongPress.current = false;
     setPressing(true);
+    // Préchargement de la route cible dès le touch début : la page est prête
+    // avant même que Hendrix relâche son doigt (navigation perçue instantanée).
+    router.prefetch(`/chantiers/${chantier.id}`);
     longPressTimer.current = setTimeout(() => {
       didLongPress.current = true;
       setPressing(false);
@@ -27,7 +30,7 @@ export default function ChantierCard({ chantier, onDelete }: ChantierCardProps) 
       if (navigator.vibrate) navigator.vibrate(50);
       onDelete(chantier.id);
     }, 600);
-  }, [chantier.id, onDelete]);
+  }, [chantier.id, onDelete, router]);
 
   const handlePressEnd = useCallback(() => {
     if (longPressTimer.current) {
