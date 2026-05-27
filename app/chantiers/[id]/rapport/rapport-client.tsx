@@ -73,13 +73,17 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
   const [savingPhotos, setSavingPhotos] = useState(false);
   const [showSavePhotosModal, setShowSavePhotosModal] = useState(false);
   const savePhotosPromptHandledRef = useRef(false);
+  // Fallback client : si le fetch serveur renvoie 0 (timing, cookies SSR…),
+  // on retente côté client pour que la popup puisse s'afficher.
+  const [clientPhotoUrls, setClientPhotoUrls] = useState<string[]>([]);
 
   const contenu = rapport?.contenu_json as RapportContenu | null;
-  // Pendant la génération, on a les URLs depuis capture_items (props serveur).
-  // Une fois le rapport généré, on utilise celles du rapport (cohérent avec ce qui est affiché).
+  // Photos disponibles : on combine les sources possibles pour ne rien perdre
+  // (prop serveur OU fallback client si le prop est vide).
+  const effectiveCapturePhotoUrls = capturePhotoUrls.length > 0 ? capturePhotoUrls : clientPhotoUrls;
   const allPhotoUrls = contenu
     ? Array.from(new Set(contenu.observations.flatMap((o) => o.photos.map((p) => p.url))))
-    : Array.from(new Set(capturePhotoUrls));
+    : Array.from(new Set(effectiveCapturePhotoUrls));
 
   useEffect(() => {
     if (!contenu && !hasStartedRef.current) {
@@ -106,14 +110,33 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
     return () => { if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl); };
   }, [pdfBlobUrl]);
 
+  // Fallback : si le prop serveur capturePhotoUrls est vide, on retente côté client
+  // au montage (RLS, timing SSR, etc.). Ça garantit que la popup peut s'afficher.
+  useEffect(() => {
+    if (capturePhotoUrls.length > 0) return;
+    let cancelled = false;
+    supabase
+      .from('capture_items')
+      .select('photo_url')
+      .eq('chantier_id', chantier.id)
+      .eq('type', 'photo')
+      .not('photo_url', 'is', null)
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        const urls = data.map((d) => d.photo_url as string).filter(Boolean);
+        if (urls.length > 0) setClientPhotoUrls(urls);
+      });
+    return () => { cancelled = true; };
+  }, [capturePhotoUrls.length, chantier.id, supabase]);
+
   // Pendant la génération du rapport : on profite du temps d'attente pour proposer
   // d'enregistrer les photos dans la pellicule. Une seule proposition par session.
   useEffect(() => {
-    if (generating && capturePhotoUrls.length > 0 && !savePhotosPromptHandledRef.current) {
+    if (generating && effectiveCapturePhotoUrls.length > 0 && !savePhotosPromptHandledRef.current) {
       const t = setTimeout(() => setShowSavePhotosModal(true), 200);
       return () => clearTimeout(t);
     }
-  }, [generating, capturePhotoUrls.length]);
+  }, [generating, effectiveCapturePhotoUrls.length]);
 
   async function handleGenerate() {
     setGenerating(true);
@@ -438,7 +461,7 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
       </main>
 
       {/* ===== POPUP "Enregistrer photos dans pellicule" PENDANT LE LOADER ===== */}
-      {showSavePhotosModal && generating && capturePhotoUrls.length > 0 && (
+      {showSavePhotosModal && generating && effectiveCapturePhotoUrls.length > 0 && (
         <div className="fixed inset-0 z-30 flex items-center justify-center px-4">
           {/* Backdrop léger : loader visible derrière */}
           <div
@@ -458,7 +481,7 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
                 Pendant la génération…
               </h3>
               <p className="text-sm text-gray-600">
-                Vous voulez enregistrer vos {capturePhotoUrls.length} photo{capturePhotoUrls.length > 1 ? 's' : ''} dans votre pellicule iPhone&nbsp;?
+                Vous voulez enregistrer vos {effectiveCapturePhotoUrls.length} photo{effectiveCapturePhotoUrls.length > 1 ? 's' : ''} dans votre pellicule iPhone&nbsp;?
               </p>
             </div>
             <button
