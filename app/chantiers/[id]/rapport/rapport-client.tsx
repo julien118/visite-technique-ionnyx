@@ -110,7 +110,7 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
   // d'enregistrer les photos dans la pellicule. Une seule proposition par session.
   useEffect(() => {
     if (generating && capturePhotoUrls.length > 0 && !savePhotosPromptHandledRef.current) {
-      const t = setTimeout(() => setShowSavePhotosModal(true), 600);
+      const t = setTimeout(() => setShowSavePhotosModal(true), 200);
       return () => clearTimeout(t);
     }
   }, [generating, capturePhotoUrls.length]);
@@ -655,57 +655,6 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
                 Plus tard
               </button>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modale "Enregistrer les photos dans la pellicule" — affichée pendant la génération */}
-      {showSavePhotosModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          <div className="absolute inset-0 bg-black/40" />
-          <div className="relative bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-scale-in">
-            <div className="text-center mb-4">
-              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full mb-3" style={{ background: 'linear-gradient(135deg, #D1FAE5, #A7F3D0)' }}>
-                <span className="text-2xl">🖼️</span>
-              </div>
-              <h2 className="text-lg font-bold text-gray-900 leading-tight">
-                Enregistrer vos photos<br />dans votre pellicule&nbsp;?
-              </h2>
-              <p className="text-sm text-gray-500 mt-2">
-                {capturePhotoUrls.length} photo{capturePhotoUrls.length > 1 ? 's' : ''} prise{capturePhotoUrls.length > 1 ? 's' : ''} pendant la visite
-              </p>
-            </div>
-
-            <button
-              onClick={async () => {
-                savePhotosPromptHandledRef.current = true;
-                setShowSavePhotosModal(false);
-                await handleSavePhotosToGallery();
-              }}
-              disabled={savingPhotos}
-              className="w-full h-12 btn-primary font-semibold rounded-xl transition-transform disabled:opacity-50 flex items-center justify-center gap-2 mb-2"
-            >
-              {savingPhotos ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Préparation…
-                </>
-              ) : (
-                <>
-                  <span>📥</span>
-                  Oui, enregistrer
-                </>
-              )}
-            </button>
-            <button
-              onClick={() => {
-                savePhotosPromptHandledRef.current = true;
-                setShowSavePhotosModal(false);
-              }}
-              className="w-full h-11 text-gray-500 text-sm font-medium rounded-xl active:bg-gray-100 transition-colors"
-            >
-              Plus tard
-            </button>
           </div>
         </div>
       )}
