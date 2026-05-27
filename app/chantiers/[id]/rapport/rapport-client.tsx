@@ -73,6 +73,7 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
   const [savingPhotos, setSavingPhotos] = useState(false);
   const [showSavePhotosModal, setShowSavePhotosModal] = useState(false);
   const [confirmingSkipPhotos, setConfirmingSkipPhotos] = useState(false);
+  const [photosAlreadySaved, setPhotosAlreadySaved] = useState(false);
   const savePhotosPromptHandledRef = useRef(false);
   // Fallback client : si le fetch serveur renvoie 0 (timing, cookies SSR…),
   // on retente côté client pour que la popup puisse s'afficher.
@@ -255,9 +256,11 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
             files,
             title: `Photos visite — ${chantier.client_prenom} ${chantier.client_nom}`,
           });
-          // Partage abouti : on referme la popup et on ne la repropose plus.
+          // Partage abouti : on referme la popup, on ne la repropose plus,
+          // et on masque le bouton du bas qui devient inutile.
           savePhotosPromptHandledRef.current = true;
           setShowSavePhotosModal(false);
+          setPhotosAlreadySaved(true);
         } catch {
           // Utilisateur a annulé : silencieux, on laisse la popup ouverte.
         }
@@ -599,7 +602,8 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
             </div>
 
             {/* Niveau 4 — Enregistrer photos dans pellicule */}
-            {allPhotoUrls.length > 0 && (
+            {/* Masqué si l'utilisateur a déjà sauvegardé via la popup (succès du share) */}
+            {allPhotoUrls.length > 0 && !photosAlreadySaved && (
               <button
                 onClick={handleSavePhotosToGallery}
                 disabled={savingPhotos}
@@ -613,7 +617,7 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
                 ) : (
                   <>
                     <span className="text-base">🖼️</span>
-                    Enregistrer {allPhotoUrls.length} photo{allPhotoUrls.length > 1 ? 's' : ''} dans ma pellicule
+                    Enregistrer les photos de mon rapport dans ma galerie ({allPhotoUrls.length})
                   </>
                 )}
               </button>
