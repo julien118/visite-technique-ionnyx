@@ -27,22 +27,26 @@ export default function ReportView({ contenu, onUpdate }: ReportViewProps) {
   const [editText, setEditText] = useState('');
   const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
 
-  const client = contenu.client;
-  const dateFormatted = new Date(client.date_visite).toLocaleDateString('fr-FR', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  const client = contenu.client ?? ({} as RapportContenu['client']);
+  const observations = Array.isArray(contenu.observations) ? contenu.observations : [];
+  const visitDate = client.date_visite ? new Date(client.date_visite) : null;
+  const dateFormatted = visitDate && !isNaN(visitDate.getTime())
+    ? visitDate.toLocaleDateString('fr-FR', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    : '';
 
   function startEditObs(index: number) {
     setEditingObsIndex(index);
-    setEditText(contenu.observations[index].description);
+    setEditText(observations[index]?.description ?? '');
   }
 
   function saveEditObs() {
     if (editingObsIndex === null) return;
     const updated = { ...contenu };
-    updated.observations = [...contenu.observations];
+    updated.observations = [...observations];
     updated.observations[editingObsIndex] = {
       ...updated.observations[editingObsIndex],
       description: editText,
@@ -76,7 +80,7 @@ export default function ReportView({ contenu, onUpdate }: ReportViewProps) {
       </div>
 
       {/* Observations */}
-      {contenu.observations.map((obs, index) => (
+      {observations.map((obs, index) => (
         <ObservationBlock
           key={index}
           obs={obs}
@@ -288,9 +292,9 @@ function ObservationBlock({
       )}
 
       {/* Photos */}
-      {obs.photos.length > 0 && (
+      {(obs.photos?.length ?? 0) > 0 && (
         <div className="space-y-3 mt-4">
-          {obs.photos.map((photo, pIdx) => (
+          {(obs.photos ?? []).map((photo, pIdx) => (
             <button
               key={pIdx}
               onClick={() => onPhotoClick(photo.url)}
@@ -312,11 +316,11 @@ function ObservationBlock({
       )}
 
       {/* Points de vigilance — vert IONNYX */}
-      {obs.points_vigilance.length > 0 && (
+      {(obs.points_vigilance?.length ?? 0) > 0 && (
         <div className="mt-4 p-3 bg-emerald-50 rounded-lg border-l-[3px] border-emerald-500">
           <p className="text-sm font-semibold text-emerald-700 mb-1">Points de vigilance</p>
           <ul className="space-y-0.5">
-            {obs.points_vigilance.map((pv, pvIdx) => (
+            {(obs.points_vigilance ?? []).map((pv, pvIdx) => (
               <li key={pvIdx} className="text-sm text-gray-700 flex items-start gap-2">
                 <span className="text-emerald-500 mt-1.5 text-xs">●</span>
                 <span>{renderBoldText(pv)}</span>

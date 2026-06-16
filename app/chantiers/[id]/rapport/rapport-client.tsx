@@ -84,7 +84,7 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
   // (prop serveur OU fallback client si le prop est vide).
   const effectiveCapturePhotoUrls = capturePhotoUrls.length > 0 ? capturePhotoUrls : clientPhotoUrls;
   const allPhotoUrls = contenu
-    ? Array.from(new Set(contenu.observations.flatMap((o) => o.photos.map((p) => p.url))))
+    ? Array.from(new Set((contenu.observations ?? []).flatMap((o) => (o.photos ?? []).map((p) => p.url))))
     : Array.from(new Set(effectiveCapturePhotoUrls));
 
   useEffect(() => {
