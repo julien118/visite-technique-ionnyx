@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { reportError } from '@/lib/monitoring';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { pcloudLogout, type PCloudHostname } from '@/lib/pcloud';
@@ -43,6 +44,7 @@ export async function POST() {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('[pCloud disconnect] Erreur:', error);
+    await reportError('Déconnexion pCloud', error);
     return NextResponse.json({ error: 'Erreur déconnexion' }, { status: 500 });
   }
 }

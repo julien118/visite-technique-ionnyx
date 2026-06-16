@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { buildDigest } from '@/lib/usage';
 import { sendTelegram, notify } from '@/lib/notify';
+import { reportError } from '@/lib/monitoring';
 
 // Dispatcher cron UNIQUE (appelé une fois par jour par Vercel Cron).
 // Sur Vercel Hobby, le nombre de crons est limité — on centralise donc tout ici :
@@ -32,6 +33,7 @@ export async function GET(request: NextRequest) {
     ran.push('keep-alive');
   } catch (e) {
     console.error('[cron] keep-alive:', e);
+    await reportError('Cron — keep-alive Supabase', e);
   }
 
   // 2) Santé du modèle Anthropic : probe minimal, alerte si retiré (404).
@@ -66,6 +68,7 @@ export async function GET(request: NextRequest) {
       ran.push('digest:week');
     } catch (e) {
       console.error('[cron] digest week:', e);
+      await reportError('Cron — digest hebdomadaire', e);
     }
   }
 
@@ -76,6 +79,7 @@ export async function GET(request: NextRequest) {
       ran.push('digest:month');
     } catch (e) {
       console.error('[cron] digest month:', e);
+      await reportError('Cron — digest mensuel', e);
     }
   }
 

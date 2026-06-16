@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { reportError } from '@/lib/monitoring';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { pcloudLogin, type PCloudHostname } from '@/lib/pcloud';
@@ -63,6 +64,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, hostname });
   } catch (error) {
     console.error('[pCloud connect] Erreur:', error);
+    await reportError('Connexion pCloud', error);
     return NextResponse.json({ error: 'Erreur lors de la connexion pCloud' }, { status: 500 });
   }
 }
