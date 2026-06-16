@@ -1,5 +1,6 @@
 {
   "crons": [
-    { "path": "/api/keep-alive", "schedule": "0 6 * * *" }
+    { "path": "/api/keep-alive", "schedule": "0 6 * * *" },
+    { "path": "/api/model-health", "schedule": "0 7 * * *" }
   ]
 }
