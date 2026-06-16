@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { reportError } from '@/lib/monitoring';
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ text: result.text });
   } catch (error) {
     console.error('Erreur transcription:', error);
+    await reportError('Transcription audio (Groq)', error);
     return NextResponse.json(
       { error: 'Erreur serveur lors de la transcription' },
       { status: 500 }

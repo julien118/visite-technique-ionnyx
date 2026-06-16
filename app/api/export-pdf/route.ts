@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { reportError } from '@/lib/monitoring';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { RapportContenu } from '@/lib/types';
@@ -59,6 +60,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Erreur export PDF:', error);
+    await reportError('Export PDF', error);
     return NextResponse.json({ error: 'Erreur export PDF' }, { status: 500 });
   }
 }

@@ -1,13 +1,31 @@
 'use client';
 
+import { useEffect } from 'react';
+
 // Filet de sécurité ultime : capture les erreurs survenant dans le layout racine
 // lui-même (où error.tsx ne peut pas intervenir). Doit fournir ses propres
 // <html>/<body> et n'utilise que des styles inline (le CSS global peut ne pas
-// être chargé si le layout a planté).
-export default function GlobalError({ reset }: {
+// être chargé si le layout a planté). Remonte aussi l'erreur pour alerte Telegram.
+export default function GlobalError({
+  error,
+  reset,
+}: {
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  useEffect(() => {
+    console.error('Erreur globale interceptée:', error);
+    fetch('/api/client-error', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: '[global] ' + (error?.message || String(error)),
+        digest: error?.digest,
+        url: typeof window !== 'undefined' ? window.location.href : '',
+      }),
+    }).catch(() => {});
+  }, [error]);
+
   return (
     <html lang="fr">
       <body style={{ fontFamily: 'system-ui, -apple-system, sans-serif', background: '#F8FAFC', margin: 0 }}>

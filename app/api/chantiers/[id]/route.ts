@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { reportError } from '@/lib/monitoring';
 
 export async function DELETE(
   request: Request,
@@ -53,6 +54,7 @@ export async function DELETE(
 
   if (error) {
     console.error('Erreur suppression chantier:', error);
+    await reportError('Suppression de chantier', error);
     return NextResponse.json({ error: 'Erreur lors de la suppression' }, { status: 500 });
   }
 

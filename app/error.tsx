@@ -14,8 +14,18 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Trace l'erreur dans la console pour le diagnostic
+    // Trace dans la console + remonte l'erreur au serveur pour alerte Telegram
+    // immédiate (le token du bot reste côté serveur).
     console.error('Erreur applicative interceptée:', error);
+    fetch('/api/client-error', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: error?.message || String(error),
+        digest: error?.digest,
+        url: typeof window !== 'undefined' ? window.location.href : '',
+      }),
+    }).catch(() => {});
   }, [error]);
 
   const router = useRouter();

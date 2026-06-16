@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { generateReport } from '@/lib/openai';
+import { reportError } from '@/lib/monitoring';
 
 export async function POST(request: NextRequest) {
   try {
@@ -141,6 +142,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ rapport: rapportContenu });
   } catch (error) {
     console.error('Erreur génération rapport:', error);
+    await reportError('Génération de rapport', error);
     return NextResponse.json(
       { error: 'Erreur lors de la génération du rapport' },
       { status: 500 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { reportError } from '@/lib/monitoring';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { pcloudUploadFile, pcloudGetFileLink, type PCloudHostname } from '@/lib/pcloud';
@@ -120,6 +121,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('[pCloud] Erreur upload:', error);
+    await reportError('Envoi pCloud', error);
     return NextResponse.json(
       { error: "Erreur lors de l'envoi vers pCloud" },
       { status: 500 }
