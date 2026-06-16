@@ -23,15 +23,18 @@
   - Suppression par swipe gauche (mobile) ou bouton poubelle (desktop) + modale de confirmation
 - **Création/édition de chantier** — Formulaire avec auto-save debounce 1s, autocomplétion adresse (API adresse.data.gouv.fr), bouton "Supprimer ce chantier" en bas
 - **Capture terrain (feature core)** — Timeline verticale chronologique mixant vocaux et photos
-- **Génération de rapport IA** — Claude (claude-sonnet-4-20250514) avec corrélation photos/observations
+- **Génération de rapport IA** — Claude (modèle via env `ANTHROPIC_MODEL`, défaut `claude-sonnet-4-6`) avec corrélation photos/observations
 - **Affichage du rapport** — Observations groupées, édition inline, viewer photo plein écran
 - **Export PDF** — Téléchargement local via html2canvas + jspdf
+- **Export pCloud** — Envoi du rapport PDF vers pCloud (dossier "2 ETUDES-DEVIS"), connexion par token (mot de passe jamais stocké). API /api/pcloud/*.
 - **Suppression en cascade** — API DELETE /api/chantiers/[id] : supprime chantier + capture_items + rapport + fichiers Storage (audio + photos). RLS protège les données.
+- **Résilience modèle IA** — Si Anthropic retire le modèle (404), bascule auto sur un repli (`MODEL_CHAIN` : sonnet-4-6 → sonnet-4-5 → opus-4-8) → jamais de coupure. Modèle surchargeable sans redéploiement via env `ANTHROPIC_MODEL`.
+- **Observabilité & reporting (Telegram)** — Digests d'usage hebdo (dimanche) + mensuel (1er) : nb visites + tokens + coût **$/€** ; alerte immédiate si modèle retiré ; **alerte d'erreur en temps réel** (raison + comment résoudre). Piloté par env, multi-tenant. 📘 **Runbook complet : `SURVEILLANCE.md`.**
+- **Error boundaries** — app/error.tsx + global-error.tsx : écran propre au lieu de l'écran blanc « Application error », + remontée des crashs client pour alerte.
 - **Déploiement** — GitHub (julien118/visite-technique-ionnyx) + Vercel (visite-technique-mtc37.vercel.app)
 
 ### Fonctionnalités non implémentées (prévues V2+)
 - Mode offline avec queue de sync
-- Export Google Drive automatique
 - Signup public
 - Équipes multi-utilisateurs
 - Génération de devis
@@ -47,7 +50,7 @@
 | **Framework** | Next.js 14 (App Router) + TypeScript | Simple, rapide, serverless-ready, SSR pour l'auth |
 | **CSS** | Tailwind CSS | Léger, mobile-first natif, pas de surcharge UI framework |
 | **Backend/Auth/DB** | Supabase (PostgreSQL + Auth + Storage) | Tout-en-un, RLS pour isolation des données par user, storage intégré |
-| **IA rapport** | Anthropic Claude (pas OpenAI) | Meilleur raisonnement pour la corrélation sémantique photos/observations |
+| **IA rapport** | Anthropic Claude — modèle via env `ANTHROPIC_MODEL` (défaut `claude-sonnet-4-6`) + chaîne de repli | Meilleur raisonnement ; le modèle codé en dur a déjà cassé la prod (retrait de Sonnet 4 le 15/06/2026) → repli auto + canari d'alerte |
 | **Transcription audio** | Groq Whisper (whisper-large-v3-turbo) | Rapide (<10s), bon support du français |
 | **PDF** | html2canvas + jspdf + jspdf-autotable | Génération côté client, pas de dépendance serveur |
 | **Compression images** | Client-side canvas (max 1920px, JPEG 0.8) | Réduit la bande passante sur les chantiers avec 4G variable |
@@ -57,9 +60,12 @@
 | **Suppression chantier** | API route DELETE + nettoyage Storage | Cascade DB via FK + suppression manuelle des fichiers Storage |
 | **Déploiement** | Vercel (auto-deploy depuis GitHub) | Gratuit, intégration Next.js native |
 | **Git config** | Email julien@ionnyx.fr | Nécessaire pour que Vercel Hobby accepte les commits |
+| **Export cloud** | pCloud (token, dossier "2 ETUDES-DEVIS") | Remplace le Google Drive prévu ; mot de passe jamais stocké |
+| **Observabilité** | Digests + alertes sur Telegram, piloté par env (DEPLOYMENT_NAME…), 1 cron dispatcher `/api/cron` | Surveillance complète, multi-tenant, réutilisable par client. Voir `SURVEILLANCE.md` |
+| **Résilience modèle** | Chaîne de repli `MODEL_CHAIN` + canari `/api/model-health` | Anthropic retire ses snapshots ~1 an après leur sortie → jamais de coupure + alerte |
 
 ### Note technique
-- Le fichier `lib/openai.ts` est mal nommé — contient en réalité le client Anthropic. Héritage du switch GPT-4.1 → Claude, renommage pas encore fait.
+- Le fichier `lib/openai.ts` est mal nommé — contient en réalité le client Anthropic (clé `ANTHROPIC_API_KEY` = `sk-ant-…`, **PAS** une clé OpenAI). Héritage du switch GPT-4.1 → Claude, renommage pas encore fait. Confusion confirmée en Session 5.
 
 ---
 
@@ -82,20 +88,23 @@
   2. Git email local (`@MacBook-Air`) non reconnu par GitHub → fix : configurer `julien@ionnyx.fr` + rebase + force push
 - **Design itératif** — Le premier passage sur le design de la liste n'était pas assez abouti (badges gris, onglets coupés, cartes trop collées). Il a fallu 3 itérations pour arriver au bon résultat. Leçon : appliquer directement les classes Tailwind exactes demandées par l'utilisateur.
 
+- **Modèle Anthropic codé en dur = bombe à retardement** — Le 2026-06-16, `claude-sonnet-4-20250514` (Sonnet 4) a été retiré par Anthropic → toutes les générations en 404 → 500 "Erreur de génération" (Hendrix bloqué). Fix : `claude-sonnet-4-6` + **chaîne de repli auto** + **canari quotidien** qui alerte sur Telegram. Leçon : toujours un fallback + une alerte sur les dépendances modèle.
+- **Projet sur iCloud Drive (~/Desktop)** — Lenteurs/crashs en dev local (node_modules déchargés → ETIMEDOUT, build ~99s, dev server qui crashe au 1er lancement). À déplacer hors d'iCloud (ex. ~/Developer). N'affecte PAS la prod (Vercel).
+
 ### Bugs connus
-- Aucun bug bloquant identifié à ce stade
+- Aucun bug bloquant connu. Le bug critique de génération (modèle retiré, 16/06/2026) est corrigé et protégé par repli auto + alerte.
 
 ---
 
 ## 4. PROCHAINES ÉTAPES
 
-1. **Renommer `lib/openai.ts`** → `lib/anthropic.ts` (cohérence)
-2. **Tester le flux complet** sur mobile réel (iPhone + Android)
-3. **Mode offline** — Service worker + IndexedDB pour queue de sync
-4. **Signup public** — Formulaire d'inscription avec validation email
-5. **Export Google Drive** — Intégration API pour upload automatique du rapport
+1. **Renommer `lib/openai.ts`** → `lib/anthropic.ts` (cohérence — toujours pas fait, source de confusion confirmée)
+2. **Déplacer le projet hors d'iCloud** (~/Developer) pour fluidifier le dev local
+3. **Tester le flux complet** sur mobile réel (iPhone + Android)
+4. **Mode offline** — Service worker + IndexedDB pour queue de sync
+5. **Signup public** — Formulaire d'inscription avec validation email
 6. **Optimisations UX terrain** — Retours utilisateurs à intégrer
 
 ---
 
-*Dernière mise à jour : 2026-04-01 — Session 4 : déploiement GitHub/Vercel, header dynamique, suppression chantier, filtres/recherche, refonte design liste.*
+*Dernière mise à jour : 2026-06-16 — **Session 5** : fix prod critique (modèle Sonnet 4 retiré → `claude-sonnet-4-6`) + résilience modèle (chaîne de repli + canari), export pCloud documenté, **digests usage/coût $/€ + alertes modèle & erreurs sur Telegram** (multi-tenant, voir `SURVEILLANCE.md`), rotation des clés Anthropic + Groq vérifiée (dev + prod). — Session 4 : déploiement GitHub/Vercel, header dynamique, suppression chantier, filtres/recherche, refonte design liste.*
