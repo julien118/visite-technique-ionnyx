@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import * as Sentry from '@sentry/nextjs';
 
 // Error boundary Next.js : intercepte toute exception levée pendant le rendu
 // d'une page (ex: rapport au contenu malformé) et affiche un écran propre
@@ -14,9 +15,10 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Trace dans la console + remonte l'erreur au serveur pour alerte Telegram
-    // immédiate (le token du bot reste côté serveur).
+    // Trace dans la console + Sentry + remonte l'erreur au serveur pour alerte
+    // Telegram immédiate (le token du bot reste côté serveur).
     console.error('Erreur applicative interceptée:', error);
+    Sentry.captureException(error);
     fetch('/api/client-error', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

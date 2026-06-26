@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import * as Sentry from '@sentry/nextjs';
 
 // Filet de sécurité ultime : capture les erreurs survenant dans le layout racine
 // lui-même (où error.tsx ne peut pas intervenir). Doit fournir ses propres
@@ -15,6 +16,7 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error('Erreur globale interceptée:', error);
+    Sentry.captureException(error);
     fetch('/api/client-error', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
