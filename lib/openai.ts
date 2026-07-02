@@ -29,7 +29,7 @@ interface CaptureData {
 // $3/$15), Opus en dernier recours : un peu plus cher, mais garantit que la
 // génération n'échoue JAMAIS pour cause de modèle retiré. Si Anthropic retire le
 // modèle préféré (404), on bascule automatiquement sur le suivant de la liste.
-const MODEL_CHAIN: string[] = Array.from(
+export const MODEL_CHAIN: string[] = Array.from(
   new Set([
     process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
     'claude-sonnet-4-6',

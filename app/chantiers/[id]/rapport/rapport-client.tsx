@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Chantier, Rapport, RapportContenu } from '@/lib/types';
 import { createClient } from '@/lib/supabase/client';
 import ReportView from '@/components/ReportView';
+import LogoLink from '@/components/LogoLink';
+import AssistantTicket from '@/components/AssistantTicket';
 
 interface RapportClientProps {
   chantier: Chantier;
@@ -12,6 +14,7 @@ interface RapportClientProps {
   hasPCloudConnected: boolean;
   pcloudEmail: string | null;
   capturePhotoUrls: string[];
+  hasDevis: boolean;
 }
 
 const GENERATION_STEPS = [
@@ -20,6 +23,15 @@ const GENERATION_STEPS = [
   { label: 'Structuration du rapport…', icon: 'doc' },
   { label: 'Rédaction professionnelle…', icon: 'pen' },
   { label: 'Finalisation…', icon: 'check' },
+];
+
+// Étapes affichées pendant la préparation du devis (réplique ATG).
+const DEVIS_STEPS = [
+  'Lecture de vos observations…',
+  'Recherche dans vos devis passés…',
+  'Sélection des ouvrages de votre bibliothèque…',
+  'Rédaction des descriptions techniques…',
+  'Mise en forme du devis…',
 ];
 
 function StepIcon({ icon, done }: { icon: string; done: boolean }) {
@@ -41,7 +53,7 @@ function StepIcon({ icon, done }: { icon: string; done: boolean }) {
   return <>{icons[icon] || null}</>;
 }
 
-export default function RapportClient({ chantier, rapport: initialRapport, hasPCloudConnected, pcloudEmail, capturePhotoUrls }: RapportClientProps) {
+export default function RapportClient({ chantier, rapport: initialRapport, hasPCloudConnected, pcloudEmail, capturePhotoUrls, hasDevis }: RapportClientProps) {
   const router = useRouter();
   const supabase = createClient();
   const [rapport, setRapport] = useState(initialRapport);
@@ -50,6 +62,64 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
   const [currentStep, setCurrentStep] = useState(0);
   const stepIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasStartedRef = useRef(false);
+
+  // ===== Devis (Phase 3) : préparation depuis le rapport =====
+  const [preparingDevis, setPreparingDevis] = useState(false);
+  const [devisStep, setDevisStep] = useState(0);
+
+  // Padding bas dynamique : le contenu ne doit JAMAIS passer sous la barre
+  // d'actions fixe (dont la hauteur varie selon les boutons affichés). On mesure
+  // la barre et on réserve exactement sa hauteur (+ un peu d'air).
+  const [bottomPad, setBottomPad] = useState(240);
+  const roRef = useRef<ResizeObserver | null>(null);
+  const bottomBarRef = useCallback((el: HTMLDivElement | null) => {
+    roRef.current?.disconnect();
+    if (!el) return;
+    const maj = () => setBottomPad(el.offsetHeight + 24);
+    maj();
+    const ro = new ResizeObserver(maj);
+    ro.observe(el);
+    roRef.current = ro;
+  }, []);
+
+  async function handlePrepareDevis() {
+    if (preparingDevis) return;
+    setPreparingDevis(true);
+    setDevisStep(0);
+    const stepInterval = setInterval(() => {
+      setDevisStep((prev) => (prev < DEVIS_STEPS.length - 1 ? prev + 1 : prev));
+    }, 5500);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 120000);
+    try {
+      const res = await fetch('/api/devis/proposer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chantierId: chantier.id }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      clearInterval(stepInterval);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Échec de la préparation du devis');
+      }
+      setDevisStep(DEVIS_STEPS.length);
+      setTimeout(() => router.push(`/chantiers/${chantier.id}/devis`), 400);
+    } catch (e) {
+      clearTimeout(timer);
+      clearInterval(stepInterval);
+      const msg =
+        e instanceof DOMException && e.name === 'AbortError'
+          ? 'La préparation prend trop de temps. Vérifiez le réseau et réessayez.'
+          : e instanceof Error
+            ? e.message
+            : 'Erreur lors de la préparation du devis';
+      setError(msg);
+      setPreparingDevis(false);
+      setDevisStep(0);
+    }
+  }
 
   // pCloud
   const [showPCloudModal, setShowPCloudModal] = useState(false);
@@ -355,12 +425,12 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
   }
 
   function renderPCloudButton() {
-    const baseClass = 'w-full h-14 rounded-xl font-semibold text-base flex items-center justify-center gap-3 active:scale-[0.97] transition-all';
+    const baseClass = 'w-full py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.97] transition-all';
 
     if (pcloudStatus === 'uploading') {
       return (
         <button disabled className={`${baseClass} btn-primary opacity-80`}>
-          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
           Envoi en cours…
         </button>
       );
@@ -369,11 +439,11 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
       return (
         <div>
           <button disabled className={`${baseClass} bg-emerald-700 text-white`}>
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
             Enregistré dans pCloud
           </button>
           {pcloudLink && (
-            <a href={pcloudLink} target="_blank" rel="noopener noreferrer" className="block text-center text-sm text-emerald-600 font-medium mt-2 active:text-emerald-700">
+            <a href={pcloudLink} target="_blank" rel="noopener noreferrer" className="block text-center text-xs text-emerald-600 font-medium mt-1.5 active:text-emerald-700">
               Ouvrir dans pCloud →
             </a>
           )}
@@ -383,38 +453,38 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
     if (pcloudStatus === 'error') {
       return (
         <button onClick={handlePCloudClick} className={`${baseClass} bg-red-500 text-white`}>
-          <span>⚠️</span>
+          <span className="text-base">⚠️</span>
           Erreur — Réessayer
         </button>
       );
     }
     return (
-      <button onClick={handlePCloudClick} className={`${baseClass} btn-primary`} style={{ boxShadow: '0 4px 15px rgba(16,185,129,0.3)' }}>
-        <span className="text-xl">☁️</span>
+      <button onClick={handlePCloudClick} className={`${baseClass} btn-primary`}>
+        <span className="text-base">☁️</span>
         Envoyer vers pCloud
       </button>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC]">
-      {/* Header */}
-      <header className="bg-[#1A1A1A] text-white px-4 py-4 sticky top-0 z-10">
-        <div className="max-w-lg mx-auto flex items-center gap-3">
-          <button onClick={() => router.push(`/chantiers/${chantier.id}`)} className="flex items-center justify-center w-10 h-10 -ml-2 rounded-lg active:bg-white/10 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-          </button>
-          <h1 className="text-lg font-semibold flex-1 text-center">Rapport</h1>
-          <button
-            onClick={() => router.push('/chantiers')}
-            className="flex items-center gap-1 w-10 h-10 justify-center active:opacity-70 transition-opacity"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
-          </button>
+    <div className="min-h-full bg-[#F8FAFC]">
+      {/* Header — bannière noire (parité ATG) : retour → liste, logo + client, « ? ». */}
+      <header className="bg-header border-b border-white/10 px-5 py-4 pt-safe sticky top-0 z-10 flex items-center gap-3">
+        <button
+          onClick={() => router.push('/chantiers')}
+          aria-label="Retour"
+          className="flex h-10 w-10 -ml-2 items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+        </button>
+        <div className="flex-1 min-w-0">
+          <LogoLink width={120} height={28} />
+          <p className="text-xs text-gray-300 truncate">{chantier.client_prenom} {chantier.client_nom}</p>
         </div>
+        <AssistantTicket className="shrink-0" />
       </header>
 
-      <main className="max-w-lg mx-auto px-4 py-4 pb-[220px]">
+      <main className="max-w-2xl mx-auto px-5 py-4" style={{ paddingBottom: bottomPad }}>
         {/* Loader */}
         {generating && (
           <div className="py-12">
@@ -469,7 +539,54 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
 
         {/* Rapport */}
         {contenu && !generating && (
-          <ReportView contenu={contenu} onUpdate={handleUpdateContenu} />
+          <>
+            {/* Carte devis en tête (parité ATG) — l'étape suivante après le rapport */}
+            <div className="mb-5 rounded-2xl border border-primary bg-primary/5 p-4">
+              <div className="flex items-start gap-3 mb-3">
+                <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Compte rendu généré</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {hasDevis
+                      ? "Un devis est déjà en préparation pour ce chantier. Vous pouvez le reprendre là où vous l'avez laissé."
+                      : 'Vos observations peuvent maintenant être converties en devis structuré.'}
+                  </p>
+                </div>
+              </div>
+              {hasDevis ? (
+                <button
+                  onClick={() => router.push(`/chantiers/${chantier.id}/devis`)}
+                  className="btn-primary w-full text-sm py-3 rounded-xl flex items-center justify-center gap-2"
+                >
+                  Continuer mon devis
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                </button>
+              ) : (
+                <button
+                  onClick={handlePrepareDevis}
+                  disabled={preparingDevis}
+                  className="btn-primary w-full text-sm py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {preparingDevis ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Préparation…
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-base">📋</span>
+                      Préparer mon devis
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+
+            <ReportView contenu={contenu} onUpdate={handleUpdateContenu} />
+          </>
         )}
       </main>
 
@@ -557,16 +674,38 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
         </div>
       )}
 
+      {/* ===== OVERLAY PRÉPARATION DU DEVIS ===== */}
+      {preparingDevis && (
+        <div className="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center px-6 text-center" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center mb-8 animate-pulse">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="9" y1="13" x2="15" y2="13" /><line x1="9" y1="17" x2="13" y2="17" /></svg>
+          </div>
+          <p className="text-sm font-semibold text-foreground mb-1">Préparation de votre devis</p>
+          <p className="text-xs text-gray-400 mb-8 max-w-xs">Vos observations sont croisées avec vos devis passés et votre bibliothèque pour proposer un devis structuré.</p>
+          <div className="w-full max-w-xs space-y-3">
+            {DEVIS_STEPS.map((step, i) => (
+              <div key={i} className={`flex items-center gap-3 transition-all duration-500 ${i <= devisStep ? 'opacity-100' : 'opacity-30'}`}>
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${i < devisStep ? 'bg-primary text-white' : i === devisStep ? 'bg-primary/20 text-primary animate-pulse' : 'bg-gray-200 text-gray-400'}`}>
+                  {i < devisStep ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  ) : (
+                    <span className="text-xs font-bold">{i + 1}</span>
+                  )}
+                </div>
+                <span className="text-sm text-foreground text-left">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ===== NOUVELLE BARRE D'ACTIONS ===== */}
       {contenu && !generating && (
         <div
-          className="fixed bottom-0 left-0 right-0 bg-white z-20 flex flex-col gap-2 px-4 pt-3"
-          style={{
-            boxShadow: '0 -4px 20px rgba(0,0,0,0.06)',
-            paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
-          }}
+          ref={bottomBarRef}
+          className="fixed bottom-0 left-0 right-0 bg-white z-20 flex flex-col gap-2 px-5 py-4 pb-safe border-t border-border"
         >
-          <div className="max-w-lg mx-auto w-full flex flex-col gap-2">
+          <div className="max-w-2xl mx-auto w-full flex flex-col gap-1.5">
             {/* Niveau 1 — pCloud (principal) */}
             {renderPCloudButton()}
 
@@ -574,7 +713,7 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
             <button
               onClick={handlePreviewPdf}
               disabled={loadingPdf}
-              className="w-full h-12 btn-secondary rounded-xl font-medium text-sm flex items-center justify-center gap-2 active:scale-[0.97] disabled:opacity-50 transition-all"
+              className="w-full py-3 btn-secondary rounded-xl font-medium text-sm flex items-center justify-center gap-2 active:scale-[0.97] disabled:opacity-50 transition-all"
             >
               {loadingPdf ? (
                 <>
@@ -583,20 +722,20 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
                 </>
               ) : (
                 <>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                   Prévisualiser le PDF
                 </>
               )}
             </button>
 
             {/* Niveau 3 — Partager + Régénérer */}
-            <div className="flex gap-2">
-              <button onClick={handleNativeShare} className="flex-1 h-12 btn-tertiary rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all">
-                <span className="text-base">📤</span>
+            <div className="flex gap-1.5">
+              <button onClick={handleNativeShare} className="flex-1 py-3 btn-tertiary rounded-xl text-sm font-medium flex items-center justify-center gap-1.5 transition-all">
+                <span className="text-sm">📤</span>
                 Partager
               </button>
-              <button onClick={handleGenerate} className="flex-1 h-12 btn-tertiary rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all">
-                <span className="text-base">🔄</span>
+              <button onClick={handleGenerate} className="flex-1 py-3 btn-tertiary rounded-xl text-sm font-medium flex items-center justify-center gap-1.5 transition-all">
+                <span className="text-sm">🔄</span>
                 Régénérer
               </button>
             </div>
@@ -607,17 +746,17 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
               <button
                 onClick={handleSavePhotosToGallery}
                 disabled={savingPhotos}
-                className="w-full h-11 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all text-gray-600 active:bg-gray-100 disabled:opacity-50"
+                className="w-full py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-all text-gray-500 active:bg-gray-100 disabled:opacity-50"
               >
                 {savingPhotos ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-700 rounded-full animate-spin" />
+                    <div className="w-3.5 h-3.5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
                     Préparation des photos…
                   </>
                 ) : (
                   <>
-                    <span className="text-base">🖼️</span>
-                    Enregistrer les photos de mon rapport dans ma galerie ({allPhotoUrls.length})
+                    <span className="text-sm">🖼️</span>
+                    Enregistrer les photos dans ma galerie ({allPhotoUrls.length})
                   </>
                 )}
               </button>

@@ -8,6 +8,7 @@ import { compressImage } from '@/lib/utils';
 import AudioRecorder from '@/components/AudioRecorder';
 import PhotoCapture from '@/components/PhotoCapture';
 import CaptureItemComponent from '@/components/CaptureItem';
+import AssistantTicket from '@/components/AssistantTicket';
 
 interface VisiteClientProps {
   chantier: Chantier;
@@ -369,43 +370,37 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
       className="fixed inset-0 flex flex-col overflow-hidden"
       style={{ background: 'linear-gradient(180deg, #F8FAFC 0%, #F0FDF4 100%)' }}
     >
-      {/* HEADER — ne scrolle jamais */}
-      <header className="shrink-0 bg-[#1A1A1A] text-white px-4 py-3 z-50">
-        <div className="max-w-lg mx-auto">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <h1 className="font-bold truncate">
-                {chantier.client_prenom} {chantier.client_nom}
-              </h1>
-              {chantier.client_adresse && (
-                <p className="text-sm text-gray-400 truncate">{chantier.client_adresse}</p>
-              )}
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => router.push('/chantiers')}
-                className="flex items-center gap-1 px-2 py-2 min-w-[44px] min-h-[44px] active:opacity-70 transition-opacity"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
-              </button>
-              <button
-                onClick={() => setShowEndConfirm(true)}
-                className="text-sm bg-white text-[#1A1A1A] px-3 py-1.5 rounded-xl font-medium border border-[#E5E7EB] active:bg-gray-100 transition-colors whitespace-nowrap"
-              >
-                Terminer
-              </button>
-            </div>
+      {/* HEADER — ne scrolle jamais. Bannière noire (parité ATG) : retour →
+          fiche chantier, nom client + compteurs, « Terminer », « ? ». */}
+      <header className="shrink-0 bg-header border-b border-white/10 px-5 py-4 pt-safe z-50">
+        <div className="max-w-lg mx-auto flex items-center gap-3">
+          <button
+            onClick={() => router.push(`/chantiers/${chantier.id}`)}
+            aria-label="Retour"
+            className="flex h-10 w-10 -ml-2 items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+          </button>
+          <div className="flex-1 min-w-0">
+            <h1 className="font-semibold text-white truncate">{chantier.client_prenom} {chantier.client_nom}</h1>
+            {isRecording ? (
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-xs text-red-400 font-medium">Enregistrement en cours…</span>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-300 mt-0.5">
+                {items.length} élément{items.length !== 1 ? 's' : ''} — {photoCount} photo{photoCount !== 1 ? 's' : ''}, {vocalCount} {vocalCount <= 1 ? 'vocal' : 'vocaux'}
+              </p>
+            )}
           </div>
-          {isRecording ? (
-            <div className="flex items-center gap-2 mt-1">
-              <span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
-              <span className="text-sm text-red-400 font-medium">Enregistrement en cours…</span>
-            </div>
-          ) : (
-            <p className="text-xs text-emerald-400 mt-1">
-              {items.length} élément{items.length !== 1 ? 's' : ''} — {photoCount} photo{photoCount !== 1 ? 's' : ''}, {vocalCount} {vocalCount <= 1 ? 'vocal' : 'vocaux'}
-            </p>
-          )}
+          <button
+            onClick={() => setShowEndConfirm(true)}
+            className="inline-flex items-center justify-center rounded-xl text-sm px-4 py-2 border border-white/30 text-white hover:bg-white/10 transition-colors whitespace-nowrap"
+          >
+            Terminer
+          </button>
+          <AssistantTicket className="shrink-0" />
         </div>
       </header>
 
@@ -416,7 +411,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
         className="flex-1 overflow-y-auto overflow-x-hidden"
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
-        <div className="max-w-lg mx-auto w-full px-4 py-4 pb-4">
+        <div className="max-w-lg mx-auto w-full px-5 py-4 pb-4">
         {items.length === 0 && !processing ? (
           <div className="text-center py-16">
             <div className="inline-flex items-center justify-center gap-3 mb-6">
@@ -479,7 +474,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
 
       {/* BARRE ACTIONS — ne scrolle jamais */}
       <div
-        className="shrink-0 bg-white px-4 py-3 z-50"
+        className="shrink-0 bg-white px-5 py-4 z-50"
         style={{
           boxShadow: '0 -4px 20px rgba(0,0,0,0.06)',
           paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
@@ -529,7 +524,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
       {showEndConfirm && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
           <div className="bg-white w-full max-w-lg rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl animate-scale-in">
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Terminer la visite ?</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-2">Terminer la visite ?</h2>
             <p className="text-sm text-gray-600 mb-1">
               Vous avez capté <span className="font-semibold text-gray-900">{photoCount} photo{photoCount !== 1 ? 's' : ''}</span> et <span className="font-semibold text-gray-900">{vocalCount} observation{vocalCount !== 1 ? 's' : ''} vocale{vocalCount !== 1 ? 's' : ''}</span>.
             </p>
@@ -539,7 +534,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
             <div className="space-y-3">
               <button
                 onClick={handleEndVisit}
-                className="w-full h-14 btn-primary font-bold text-lg rounded-xl transition-transform"
+                className="w-full btn-primary text-lg py-4"
               >
                 Générer le rapport
               </button>

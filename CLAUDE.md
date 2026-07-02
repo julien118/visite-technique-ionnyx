@@ -4,6 +4,22 @@
 
 ---
 
+## 0. RÈGLE IMMUABLE — FAVICON (ne jamais casser)
+
+**Le favicon de MTC37 est le logo IONNYX (fond blanc), identique à ATG. Jamais le triangle Vercel/Next.**
+
+Contrat à respecter en permanence :
+1. **Jamais d'icône dans `app/`** (`app/favicon.ico`, `app/icon.png`, `app/icon.*`, `app/apple-icon.*`). Next.js App Router auto-injecte et **écrase** tout ce qui est dans `app/` — c'est ce qui réintroduisait le triangle. La source unique = `public/`.
+2. **Jeu complet dans `public/`** (tous = logo IONNYX) : `favicon.ico` (16+32 PNG embarqués), `favicon-16.png`, `favicon-32.png`, `apple-touch-icon.png` (180), `icon-192.png`, `icon-512.png`.
+3. **Déclaré dans `app/layout.tsx` → `metadata.icons`** avec cache-busting `?v=N`. **Si un jour on change l'icône, incrémenter `?v=N` partout dans layout.tsx** (les navigateurs cachent les favicons très longtemps).
+4. Le `manifest.json` pointe vers `/icon-192.png` + `/icon-512.png`.
+
+Pour re-synchroniser depuis ATG si besoin : télécharger `/favicon-16.png`, `/favicon-32.png`, `/apple-touch-icon.png`, `/icon-192.png`, `/icon-512.png` depuis `https://atg-systeme-30-secondes.ionnyx.fr` (le `<head>` de `/login` liste les chemins ; ATG n'a pas de `/favicon.ico` → le régénérer à partir du 16+32).
+
+⚠️ **Cache Safari** : Safari indexe les favicons par URL de page et ignore souvent hard-refresh + `?v=`. Si l'icône semble bloquée en local : tester en fenêtre privée / Chrome (prouve que le serveur est bon), ou charger une URL de page différente (`localhost:3000/chantiers?x=1`), ou quitter Safari puis `rm -rf ~/Library/Safari/Favicon\ Cache`. Ce n'est **pas** un bug de l'app.
+
+---
+
 ## 1. ÉTAT DU PROJET
 
 **Nom :** Assistant de Visite Terrain IONNYX

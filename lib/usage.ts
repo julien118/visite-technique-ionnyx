@@ -5,6 +5,8 @@
 // si les tarifs changent). Le digest agrège la période et formate un message.
 // 100 % par-déploiement (chaque client a sa propre base Supabase + son DEPLOYMENT_NAME).
 
+import { nomContact } from './notify';
+
 // ====== Tarification Anthropic ($ par MILLION de tokens) ======
 type Rate = { input: number; output: number; cacheWrite: number; cacheRead: number };
 const PRICING: Record<string, Rate> = {
@@ -110,6 +112,10 @@ interface UsageRow {
   output_tokens: number;
   cost_usd: number | string;
 }
+interface TicketRow {
+  categorie: string | null;
+  statut: string | null;
+}
 
 // Construit le texte du digest (HTML léger pour Telegram). `now` injectable pour test.
 export async function buildDigest(period: Period, now: Date = new Date()): Promise<string> {
@@ -131,11 +137,15 @@ export async function buildDigest(period: Period, now: Date = new Date()): Promi
   const gte = `created_at=gte.${start.toISOString()}`;
   const lt = `created_at=lt.${end.toISOString()}`;
 
-  const [visites, photos, vocaux, usageRows] = await Promise.all([
+  const [visites, photos, vocaux, usageRows, ticketRows, backlogEnAttente] = await Promise.all([
     countRows(`chantiers?select=id&${gte}&${lt}`),
     countRows(`capture_items?select=id&type=eq.photo&${gte}&${lt}`),
     countRows(`capture_items?select=id&type=eq.vocal&${gte}&${lt}`),
     fetchRows<UsageRow>(`usage_logs?select=input_tokens,output_tokens,cost_usd&service=eq.anthropic&${gte}&${lt}`),
+    // Support : demandes d'Hendrix sur la période (catégorie + statut).
+    fetchRows<TicketRow>(`tickets?select=categorie,statut&${gte}&${lt}`),
+    // Backlog encore ouvert (global, pas seulement la période) : ce qui reste à traiter.
+    countRows(`tickets?select=id&backlog_statut=in.(nouveau,en_cours)`),
   ]);
 
   let inTok = 0;
@@ -169,6 +179,32 @@ export async function buildDigest(period: Period, now: Date = new Date()): Promi
 
   if (generations === 0) {
     lines.push(``, `<i>(Aucune génération facturée sur la période, ou suivi des coûts démarré récemment.)</i>`);
+  }
+
+  // ====== Section support (« Demander à Julien ») ======
+  const nbDemandes = ticketRows.length;
+  if (nbDemandes > 0 || backlogEnAttente > 0) {
+    const par = (c: string) => ticketRows.filter((t) => (t.categorie ?? 'autre') === c).length;
+    const bugs = par('probleme');
+    const ameliorations = par('amelioration');
+    const questions = par('question');
+    const resolues = ticketRows.filter((t) => t.statut === 'resolu').length;
+    const enAttente = nbDemandes - resolues;
+
+    const ventilation = [
+      bugs ? `${bugs} bug${plural(bugs)}` : '',
+      ameliorations ? `${ameliorations} amélioration${plural(ameliorations)}` : '',
+      questions ? `${questions} question${plural(questions)}` : '',
+    ].filter(Boolean).join(', ');
+
+    lines.push(``, `🎫 <b>Support (${nomContact()})</b>`);
+    lines.push(`• ${nbDemandes} demande${plural(nbDemandes)}${ventilation ? ` (${ventilation})` : ''}`);
+    if (nbDemandes > 0) {
+      lines.push(`• ${resolues} résolue${plural(resolues)}, ${enAttente} en attente`);
+    }
+    if (backlogEnAttente > 0) {
+      lines.push(`• 🗂️ Backlog : ${backlogEnAttente} item${plural(backlogEnAttente)} à traiter (bugs + idées)`);
+    }
   }
 
   return lines.join('\n');

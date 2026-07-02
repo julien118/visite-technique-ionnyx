@@ -16,7 +16,7 @@ export default function DeleteChantierModal({ clientName, clientAddress, deletin
 
       {/* Modale */}
       <div className="relative bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-scale-in">
-        <h2 className="text-xl font-bold text-gray-900 mb-3">
+        <h2 className="text-lg font-bold text-gray-900 mb-3">
           Supprimer ce chantier ?
         </h2>
         <div className="mb-4">

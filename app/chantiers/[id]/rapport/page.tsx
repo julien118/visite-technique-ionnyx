@@ -16,11 +16,12 @@ export default async function RapportPage({ params }: PageProps) {
     redirect('/login');
   }
 
-  const [{ data: chantier, error: chantierError }, { data: rapport }, { data: profile }, { data: photoCaptures }] = await Promise.all([
+  const [{ data: chantier, error: chantierError }, { data: rapport }, { data: profile }, { data: photoCaptures }, { data: devis }] = await Promise.all([
     supabase.from('chantiers').select('*').eq('id', id).single(),
     supabase.from('rapports').select('*').eq('chantier_id', id).single(),
     supabase.from('profiles').select('pcloud_auth_token, pcloud_email').eq('id', user.id).single(),
     supabase.from('capture_items').select('photo_url').eq('chantier_id', id).eq('type', 'photo').not('photo_url', 'is', null),
+    supabase.from('devis').select('id').eq('chantier_id', id).maybeSingle(),
   ]);
 
   if (chantierError || !chantier) {
@@ -38,6 +39,7 @@ export default async function RapportPage({ params }: PageProps) {
       hasPCloudConnected={!!profile?.pcloud_auth_token}
       pcloudEmail={profile?.pcloud_email || null}
       capturePhotoUrls={capturePhotoUrls}
+      hasDevis={!!devis}
     />
   );
 }

@@ -93,7 +93,7 @@ export default function AudioRecorder({ onRecordingComplete, disabled, onRecordi
     <button
       onClick={toggleRecording}
       disabled={disabled}
-      className={`flex-1 h-14 rounded-xl font-semibold text-lg flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+      className={`flex-1 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
         recording
           ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
           : 'btn-primary'

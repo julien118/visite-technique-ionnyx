@@ -38,3 +38,6 @@ next-env.d.ts
 
 # Supabase CLI temp
 supabase/.temp/
+
+# dev server log
+dev.log

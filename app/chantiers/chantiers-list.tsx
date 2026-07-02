@@ -1,72 +1,99 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Chantier, ChantierStatut } from '@/lib/types';
+import { Chantier, DevisStatut } from '@/lib/types';
 import ChantierCard from '@/components/ChantierCard';
 import { useRouter } from 'next/navigation';
 import UserMenu from '@/components/UserMenu';
+import LogoLink from '@/components/LogoLink';
+import AssistantTicket from '@/components/AssistantTicket';
 import DeleteChantierModal from '@/components/DeleteChantierModal';
+import { deriverStatutAffiche, sectionDe, type StatutAffiche } from '@/lib/statut-affaire';
 
 interface ChantiersListProps {
   chantiers: Chantier[];
+  // Statut du devis lié par chantier (chantier_id → statut), pour dériver la section.
+  devisStatuts: Record<string, string>;
   userEmail: string;
   companyName: string;
 }
 
-type FilterTab = 'tous' | ChantierStatut;
+// Les 3 sections d'accueil (parité ATG) : Tous, Visite technique, Devis.
+type Tab = 'tous' | 'visite_technique' | 'devis';
 
-const TABS: { key: FilterTab; label: string }[] = [
-  { key: 'tous', label: 'Tous' },
-  { key: 'en_cours', label: 'En cours' },
-  { key: 'rapport_genere', label: 'Rapport fini' },
-];
-
-const STATUT_PRIORITY: Record<ChantierStatut, number> = {
+// Tri intelligent : ce qui nécessite une action (en cours, planifié) remonte en
+// haut, puis terminés/rapports, par date de visite décroissante.
+const STATUT_PRIORITY: Record<string, number> = {
   en_cours: 0,
   planifie: 1,
   termine: 2,
   rapport_genere: 3,
 };
 
-function smartSort(chantiers: Chantier[]): Chantier[] {
+function smartSort<T extends Chantier>(chantiers: T[]): T[] {
   return [...chantiers].sort((a, b) => {
-    const pa = STATUT_PRIORITY[a.statut];
-    const pb = STATUT_PRIORITY[b.statut];
+    const pa = STATUT_PRIORITY[a.statut] ?? 9;
+    const pb = STATUT_PRIORITY[b.statut] ?? 9;
     if (pa !== pb) return pa - pb;
     return new Date(b.date_visite).getTime() - new Date(a.date_visite).getTime();
   });
 }
 
-export default function ChantiersList({ chantiers: initialChantiers, userEmail, companyName }: ChantiersListProps) {
+type ChantierAvecStatut = Chantier & { statutAffiche: StatutAffiche };
+
+export default function ChantiersList({ chantiers: initialChantiers, devisStatuts, userEmail, companyName }: ChantiersListProps) {
   const router = useRouter();
   const [chantiers, setChantiers] = useState(initialChantiers);
   const [deleteTarget, setDeleteTarget] = useState<Chantier | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [activeTab, setActiveTab] = useState<FilterTab>('tous');
+  const [activeTab, setActiveTab] = useState<Tab>('tous');
   const [search, setSearch] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Préchargement des routes les plus tapées : nouvelle visite + détail des chantiers existants.
-  // Les pages sont prêtes en cache RSC quand Hendrix appuie : navigation perçue instantanée.
+  // Préchargement des routes les plus tapées : nouvelle visite + détail des chantiers.
   useEffect(() => {
     router.prefetch('/chantiers/nouveau');
     initialChantiers.slice(0, 12).forEach((c) => router.prefetch(`/chantiers/${c.id}`));
   }, [router, initialChantiers]);
 
+  // Statut affiché dérivé pour chaque chantier (source de vérité unique).
+  // Le statut du devis lié (Phase 3) est injecté depuis `devisStatuts` → un chantier
+  // avec devis bascule en section « Devis » (Devis en cours / Devis envoyé).
+  const chantiersAvecStatut = useMemo<ChantierAvecStatut[]>(
+    () =>
+      chantiers.map((c) => ({
+        ...c,
+        statutAffiche: deriverStatutAffiche({
+          chantierStatut: c.statut,
+          aCompteRendu: c.statut === 'rapport_genere',
+          devisStatut: (devisStatuts[c.id] as DevisStatut | undefined) ?? null,
+        }),
+      })),
+    [chantiers, devisStatuts],
+  );
+
   const counts = useMemo(() => {
-    const c: Record<string, number> = { tous: chantiers.length };
-    for (const ch of chantiers) {
-      c[ch.statut] = (c[ch.statut] || 0) + 1;
+    let visite = 0;
+    let devis = 0;
+    for (const c of chantiersAvecStatut) {
+      if (sectionDe(c.statutAffiche) === 'devis') devis += 1;
+      else visite += 1;
     }
-    return c;
-  }, [chantiers]);
+    return { tous: chantiersAvecStatut.length, visite_technique: visite, devis };
+  }, [chantiersAvecStatut]);
+
+  const tabs: { key: Tab; label: string; court?: string; count: number }[] = [
+    { key: 'tous', label: 'Tous', count: counts.tous },
+    { key: 'visite_technique', label: 'Visite technique', court: 'Visite', count: counts.visite_technique },
+    { key: 'devis', label: 'Devis', count: counts.devis },
+  ];
 
   const filtered = useMemo(() => {
-    let result = chantiers;
+    let result = chantiersAvecStatut;
 
     if (activeTab !== 'tous') {
-      result = result.filter((c) => c.statut === activeTab);
+      result = result.filter((c) => sectionDe(c.statutAffiche) === activeTab);
     }
 
     if (search.trim()) {
@@ -79,7 +106,7 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
     }
 
     return smartSort(result);
-  }, [chantiers, activeTab, search]);
+  }, [chantiersAvecStatut, activeTab, search]);
 
   function handleDeleteRequest(id: string) {
     const chantier = chantiers.find((c) => c.id === id);
@@ -109,77 +136,83 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col">
-      {/* Header */}
-      <header className="bg-[#1A1A1A] text-white px-4 py-5">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">{companyName || userEmail.split('@')[0]}</h1>
-            <p className="text-sm text-emerald-400 mt-0.5">Assistant de Visite</p>
+    <div className="h-full bg-[#F8FAFC] flex flex-col">
+      {/* Header — bannière noire (parité ATG) : logo à gauche, actions à droite */}
+      <header className="flex-shrink-0 bg-header border-b border-white/10 px-5 py-4 pt-safe flex items-center justify-between">
+        <LogoLink priority />
+        <div className="flex items-center gap-3">
+          <AssistantTicket />
+          {/* Auth multi-user MTC37 : nom du compte + UserMenu conservés. Masqués
+              sur téléphone (gain de place), visibles sur ordinateur. Le « ? »
+              reste visible partout. */}
+          <div className="hidden sm:flex items-center gap-3">
+            <span className="text-sm text-gray-200">{companyName || userEmail.split('@')[0]}</span>
+            <UserMenu />
           </div>
-          <UserMenu />
         </div>
       </header>
 
-      {/* Onglets + Recherche (sticky) */}
-      <div className="sticky top-0 z-10 bg-[#F8FAFC] border-b border-gray-200">
-        {/* Onglets */}
-        <div className="max-w-lg mx-auto">
-          <div
-            className="flex gap-2 px-4 pt-3 pb-0 overflow-x-auto scrollbar-hide"
-            style={{ WebkitOverflowScrolling: 'touch' }}
-          >
-            {TABS.map((tab) => {
-              const isActive = activeTab === tab.key;
-              const count = counts[tab.key] || 0;
+      {/* Onglets + recherche — figés sous l'en-tête (app-shell : ne défilent pas) */}
+      <div className="flex-shrink-0 z-10 bg-[#F8FAFC] border-b border-gray-200">
+        <div className="max-w-2xl mx-auto px-5 pt-3 pb-4 space-y-3">
+          {/* Onglets — 3 sections (parité ATG) */}
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+            {tabs.map(({ key, label, court, count }) => {
+              const isActive = activeTab === key;
               return (
                 <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`flex-shrink-0 min-h-[44px] px-3.5 rounded-full text-sm font-semibold transition-all whitespace-nowrap ${
-                    isActive
-                      ? 'bg-[#1A1A1A] text-white shadow-sm'
-                      : 'text-gray-500 active:bg-gray-100'
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  className={`flex-1 py-2 px-2 sm:px-3 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center gap-1.5 ${
+                    isActive ? 'bg-white text-foreground shadow-sm' : 'text-gray-400 hover:text-gray-600'
                   }`}
                 >
-                  {tab.label} ({count})
+                  {/* Libellé court sur mobile, complet à partir de sm. */}
+                  <span className="sm:hidden">{court ?? label}</span>
+                  <span className="hidden sm:inline">{label}</span>
+                  {count > 0 && (
+                    <span className={`text-xs min-w-[18px] h-[18px] flex items-center justify-center rounded-full ${
+                      isActive ? 'bg-primary/10 text-primary' : 'bg-gray-200/80 text-gray-400'
+                    }`}>
+                      {count}
+                    </span>
+                  )}
                 </button>
               );
             })}
-            <div className="flex-shrink-0 w-4" aria-hidden="true" />
           </div>
-        </div>
 
-        <div className="h-4" />
-
-        {/* Barre de recherche */}
-        <div className="max-w-lg mx-auto px-4 pb-4">
+          {/* Recherche */}
           <div className="relative">
             <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none"
-              fill="none"
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
               viewBox="0 0 24 24"
+              fill="none"
               stroke="currentColor"
-              strokeWidth={2}
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input
               ref={searchRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher un client, une adresse..."
-              className="w-full h-12 pl-11 pr-10 text-base bg-white border border-[#E5E7EB] rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
+              placeholder="Rechercher par nom, adresse, objet..."
+              className="input-ionnyx pl-10 pr-10"
             />
             {search && (
               <button
                 onClick={() => setSearch('')}
+                aria-label="Effacer la recherche"
                 className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full text-gray-400 active:bg-gray-200"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
               </button>
             )}
@@ -188,62 +221,40 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
       </div>
 
       {/* Liste scrollable */}
-      <main
-        ref={listRef}
-        onScroll={handleListScroll}
-        className="flex-1 overflow-y-auto"
-      >
-        <div className="max-w-lg mx-auto px-4 pt-4 pb-32">
+      <main ref={listRef} onScroll={handleListScroll} className="flex-1 min-h-0 overflow-y-auto">
+        <div className="max-w-2xl mx-auto px-5 pt-4 pb-28">
           {chantiers.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-              </div>
-              <p className="text-gray-500 text-lg">Aucun chantier pour le moment</p>
-              <p className="text-gray-400 text-sm mt-1">Commencez par créer votre première visite</p>
-            </div>
+            <EmptyState onCreate={() => router.push('/chantiers/nouveau')} />
           ) : filtered.length === 0 ? (
             <div className="text-center py-16">
               <p className="text-gray-400 text-base">Aucun résultat</p>
             </div>
           ) : (
-            <>
-              <div className="flex flex-col gap-3">
-                {filtered.map((chantier, i) => (
-                  <div
-                    key={chantier.id}
-                    className="animate-card-appear"
-                    style={{ animationDelay: `${i * 60}ms` }}
-                  >
-                    <ChantierCard chantier={chantier} onDelete={handleDeleteRequest} />
-                  </div>
-                ))}
-              </div>
-              <p className="text-xs text-gray-400 text-center mt-4">
-                Appuyez longuement sur un chantier pour le supprimer
-              </p>
-            </>
+            <div className="space-y-3">
+              {filtered.map((chantier) => (
+                <ChantierCard
+                  key={chantier.id}
+                  chantier={chantier}
+                  statutAffiche={chantier.statutAffiche}
+                  onDelete={handleDeleteRequest}
+                />
+              ))}
+            </div>
           )}
         </div>
       </main>
 
-      {/* Bouton flottant "Nouvelle visite" */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 pb-6 bg-gradient-to-t from-[#F8FAFC] via-[#F8FAFC] to-transparent">
-        <div className="max-w-lg mx-auto">
-          <button
-            onClick={() => router.push('/chantiers/nouveau')}
-            className="w-full h-14 btn-primary font-bold text-lg rounded-2xl transition-transform flex items-center justify-center gap-2"
-            style={{ boxShadow: '0 4px 20px rgba(16,185,129,0.4)' }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            Nouvelle visite
-          </button>
-        </div>
-      </div>
+      {/* FAB + (création) — parité ATG : rond, vert, bas-droite */}
+      <button
+        onClick={() => router.push('/chantiers/nouveau')}
+        aria-label="Nouvelle visite"
+        className="fixed bottom-8 right-5 mb-safe w-14 h-14 btn-primary rounded-full flex items-center justify-center shadow-lg z-40 p-0"
+      >
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </button>
 
       {/* Modale de confirmation */}
       {deleteTarget && (
@@ -255,6 +266,24 @@ export default function ChantiersList({ chantiers: initialChantiers, userEmail, 
           onCancel={() => setDeleteTarget(null)}
         />
       )}
+    </div>
+  );
+}
+
+function EmptyState({ onCreate }: { onCreate: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 text-center">
+      <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
+        <svg className="w-8 h-8 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          <polyline points="9 22 9 12 15 12 15 22" />
+        </svg>
+      </div>
+      <p className="text-gray-500 text-lg">Aucun chantier pour le moment</p>
+      <p className="text-gray-400 text-sm mt-1 mb-6">Commencez par créer votre première visite</p>
+      <button onClick={onCreate} className="btn-primary text-base px-8 py-3">
+        Créer ma première visite
+      </button>
     </div>
   );
 }

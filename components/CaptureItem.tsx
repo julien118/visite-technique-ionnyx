@@ -126,7 +126,7 @@ function LinkedCard({
           <img
             src={photo.photo_url}
             alt="Photo chantier"
-            className="max-w-full max-h-[420px] w-auto h-auto object-contain rounded-lg"
+            className="max-w-full max-h-64 w-auto h-auto object-contain rounded-lg"
           />
         </button>
       )}
@@ -416,7 +416,7 @@ function PhotoCard({
           <img
             src={item.photo_url}
             alt="Photo chantier"
-            className="max-w-full max-h-[420px] w-auto h-auto object-contain rounded-lg"
+            className="max-w-full max-h-64 w-auto h-auto object-contain rounded-lg"
           />
         </button>
       )}
