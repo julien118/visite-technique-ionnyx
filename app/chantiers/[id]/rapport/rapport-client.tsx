@@ -273,7 +273,12 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
   function handleDownloadFromPreview() {
     if (!pdfBlobUrl) return;
     const dateStr = new Date(chantier.date_visite).toISOString().slice(0, 10);
-    const fileName = `rapport-visite-${chantier.client_prenom}-${chantier.client_nom}-${dateStr}.pdf`.replace(/\s+/g, '-');
+    // Nom personnalisé façon ATG : « compte-rendu-jerome-lechat-2026-06-18.pdf »
+    // (doit rester aligné avec le Content-Disposition de /api/export-pdf).
+    const slug = `${chantier.client_prenom || ''} ${chantier.client_nom || ''}`
+      .normalize('NFD').replace(/[^\x00-\x7f]/g, '')
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    const fileName = `compte-rendu-${slug || 'client'}-${dateStr}.pdf`;
     const a = document.createElement('a');
     a.href = pdfBlobUrl;
     a.download = fileName;

@@ -3,7 +3,18 @@ import { reportError } from '@/lib/monitoring';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { RapportContenu } from '@/lib/types';
+import { nomDeploiement } from '@/lib/notify';
 import jsPDF from 'jspdf';
+
+// Slug de nom de fichier : « Jérôme Lechat » → « jerome-lechat » (sans accents ni
+// caractères spéciaux), pour un nom de PDF propre et personnalisé à la ATG.
+function slugify(s: string): string {
+  return (s || '')
+    .normalize('NFD').replace(/[^\x00-\x7f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,13 +55,15 @@ export async function POST(request: NextRequest) {
       .single();
 
     const contenu = rapport.contenu_json as RapportContenu;
-    const pdfBuffer = await buildPdf(contenu);
+    // On passe l'origine de la requête pour charger le logo depuis /public (asset
+    // servi par le même déploiement — marche en local comme sur Vercel).
+    const pdfBuffer = await buildPdf(contenu, request.nextUrl.origin);
 
     const dateStr = chantier?.date_visite
       ? new Date(chantier.date_visite).toISOString().slice(0, 10)
       : new Date().toISOString().slice(0, 10);
-    const fileName = `rapport-visite-${chantier?.client_prenom || ''}-${chantier?.client_nom || ''}-${dateStr}.pdf`
-      .replace(/\s+/g, '-');
+    const nomClient = `${chantier?.client_prenom || ''} ${chantier?.client_nom || ''}`.trim();
+    const fileName = `compte-rendu-${slugify(nomClient) || 'client'}-${dateStr}.pdf`;
 
     return new NextResponse(new Uint8Array(pdfBuffer), {
       headers: {
@@ -142,7 +155,7 @@ function getImageDimensions(data: Uint8Array): { width: number; height: number }
   return { width: 1920, height: 1440 };
 }
 
-async function buildPdf(contenu: RapportContenu): Promise<Buffer> {
+async function buildPdf(contenu: RapportContenu, origin: string): Promise<Buffer> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -163,21 +176,48 @@ async function buildPdf(contenu: RapportContenu): Promise<Buffer> {
     }
   }
 
-  // ===== HEADER =====
-  doc.setFillColor(26, 26, 26);
-  doc.rect(0, 0, pageWidth, 32, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text('RAPPORT DE VISITE', marginH, 15);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
+  // ===== HEADER (parité ATG : bande noire, logo MTC37 à gauche, titre + date à droite) =====
   const client = contenu.client;
   const dateFormatted = new Date(client.date_visite).toLocaleDateString('fr-FR', {
     day: 'numeric', month: 'long', year: 'numeric',
   });
-  doc.text(`${client.prenom} ${client.nom} — ${dateFormatted}`, marginH, 23);
-  y = 40;
+
+  const bandH = 34;
+  doc.setFillColor(26, 26, 26);
+  doc.rect(0, 0, pageWidth, bandH, 'F');
+
+  // Logo MTC37 (blanc, fond transparent → pensé pour la bande noire), chargé depuis
+  // /public. Repli texte sur le nom de l'entreprise si l'asset est indisponible.
+  const logo = await fetchImageAsBase64(`${origin}/logo-mtc37.png`);
+  let logoOk = false;
+  if (logo && logo.width > 0) {
+    try {
+      const logoW = 32;
+      const logoH = logoW * (logo.height / logo.width);
+      doc.addImage(logo.dataUri, 'PNG', marginH, (bandH - logoH) / 2, logoW, logoH);
+      logoOk = true;
+    } catch {
+      // PNG non pris en charge / erreur de décodage : on bascule sur le repli texte.
+    }
+  }
+  if (!logoOk) {
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.text(nomDeploiement(), marginH, 20);
+  }
+
+  // Titre + date de visite, alignés à droite (comme ATG).
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(17);
+  doc.setFont('helvetica', 'bold');
+  doc.text('RAPPORT DE VISITE', pageWidth - marginH, 15, { align: 'right' });
+  doc.setTextColor(180, 180, 180);
+  doc.setFontSize(9.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(dateFormatted, pageWidth - marginH, 22, { align: 'right' });
+
+  y = bandH + 8;
 
   // ===== INFOS CLIENT =====
   doc.setTextColor(16, 185, 129);
@@ -404,7 +444,7 @@ async function buildPdf(contenu: RapportContenu): Promise<Buffer> {
     doc.setFontSize(7);
     doc.setTextColor(180, 180, 180);
     doc.text(
-      'Rapport généré par IONNYX — Assistant de Visite IA',
+      `Rapport généré par ${nomDeploiement()}`,
       pageWidth / 2,
       pageHeight - 8,
       { align: 'center' }
