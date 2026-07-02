@@ -333,10 +333,10 @@ export default function AssistantDevis({ nom, entreprise }: { nom: string; entre
         <button
           onClick={() => setOuvert(true)}
           aria-label="Ouvrir l'assistant"
-          className={`fixed right-5 z-50 h-12 w-12 rounded-full bg-primary text-white shadow-md shadow-primary/30 flex items-center justify-center hover:bg-primary-dark active:scale-95 transition-all duration-300 animate-scale-in ${
+          className={`fixed z-50 h-10 w-10 sm:h-12 sm:w-12 right-[4.5rem] top-[calc(env(safe-area-inset-top)+0.5rem)] sm:right-5 sm:top-auto rounded-full bg-primary text-white shadow-md shadow-primary/30 flex items-center justify-center hover:bg-primary-dark active:scale-95 transition-all duration-300 animate-scale-in ${
             defile
-              ? 'opacity-70 sm:opacity-0 sm:translate-y-1 sm:pointer-events-none'
-              : 'opacity-70 hover:opacity-100 focus-visible:opacity-100 active:opacity-100'
+              ? 'opacity-90 sm:opacity-0 sm:translate-y-1 sm:pointer-events-none'
+              : 'opacity-90 hover:opacity-100 focus-visible:opacity-100 active:opacity-100'
           }`}
           style={{ bottom: bottomStyle }}
         >
