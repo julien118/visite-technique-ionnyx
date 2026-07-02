@@ -16,6 +16,9 @@ interface ChantiersListProps {
   devisStatuts: Record<string, string>;
   userEmail: string;
   companyName: string;
+  // Prénom de l'artisan (CONTACT_NOM, défaut « Hendrix ») pour la salutation
+  // personnalisée. Discret, adapté à l'heure — calculé côté client (voir plus bas).
+  greetingName: string;
 }
 
 // Les 3 sections d'accueil (parité ATG) : Tous, Visite technique, Devis.
@@ -41,9 +44,19 @@ function smartSort<T extends Chantier>(chantiers: T[]): T[] {
 
 type ChantierAvecStatut = Chantier & { statutAffiche: StatutAffiche };
 
-export default function ChantiersList({ chantiers: initialChantiers, devisStatuts, userEmail, companyName }: ChantiersListProps) {
+export default function ChantiersList({ chantiers: initialChantiers, devisStatuts, userEmail, companyName, greetingName }: ChantiersListProps) {
   const router = useRouter();
   const [chantiers, setChantiers] = useState(initialChantiers);
+
+  // Salutation contextuelle « Bonjour Hendrix » — calculée côté client (heure de
+  // l'appareil, pas celle du serveur Vercel en UTC) pour être juste et éviter
+  // toute désynchro d'hydratation : le serveur et le premier rendu client
+  // n'affichent rien, puis l'effet remplit la salutation après le montage.
+  const [greeting, setGreeting] = useState('');
+  useEffect(() => {
+    const h = new Date().getHours();
+    setGreeting(h < 5 ? 'Bonsoir' : h < 12 ? 'Bonjour' : h < 18 ? 'Bon après-midi' : 'Bonsoir');
+  }, []);
   const [deleteTarget, setDeleteTarget] = useState<Chantier | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('tous');
@@ -223,6 +236,12 @@ export default function ChantiersList({ chantiers: initialChantiers, devisStatut
       {/* Liste scrollable */}
       <main ref={listRef} onScroll={handleListScroll} className="flex-1 min-h-0 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-5 pt-4 pb-28">
+          {/* Salutation discrète, personnalisée + adaptée à l'heure (partie 1). */}
+          {greeting && greetingName && (
+            <p className="text-[15px] text-gray-400 mb-3">
+              {greeting} <span className="font-semibold text-gray-600">{greetingName}</span>
+            </p>
+          )}
           {chantiers.length === 0 ? (
             <EmptyState onCreate={() => router.push('/chantiers/nouveau')} />
           ) : filtered.length === 0 ? (

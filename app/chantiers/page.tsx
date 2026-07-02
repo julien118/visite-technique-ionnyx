@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { Chantier } from '@/lib/types';
+import { nomContact } from '@/lib/notify';
 import ChantiersList from './chantiers-list';
 
 export default async function ChantiersPage() {
@@ -35,6 +36,7 @@ export default async function ChantiersPage() {
       devisStatuts={devisStatuts}
       userEmail={user.email || ''}
       companyName={profile?.company_name || ''}
+      greetingName={nomContact()}
     />
   );
 }
