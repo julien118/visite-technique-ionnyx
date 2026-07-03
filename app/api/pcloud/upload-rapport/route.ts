@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { reportError } from '@/lib/monitoring';
-import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import { pcloudUploadFile, pcloudGetFileLink, type PCloudHostname } from '@/lib/pcloud';
 
@@ -16,18 +16,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'chantierId manquant' }, { status: 400 });
     }
 
+    // cookieStore conservé pour transmettre la session à l'appel interne /api/export-pdf.
     const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        cookies: {
-          getAll() { return cookieStore.getAll(); },
-          setAll() {},
-        },
-      }
-    );
 
+    // Client SESSION (anon + RLS) au lieu du service-role : garantit que le profil
+    // ET le chantier lus plus bas appartiennent à l'utilisateur courant (avant, le
+    // service-role permettait d'exporter le chantier d'un autre vers son propre pCloud).
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
