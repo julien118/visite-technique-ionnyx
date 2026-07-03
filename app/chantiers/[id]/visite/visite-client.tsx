@@ -262,26 +262,45 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
       const compressedBlob = await compressImage(file);
 
       const fileName = `${userId}/${chantier.id}/${Date.now()}.jpg`;
-      await uploadWithRetry(supabase, 'photos', fileName, compressedBlob, 'image/jpeg');
 
+      // L'URL publique est déterministe (dérivée du chemin, aucun aller-retour
+      // réseau) : l'insert DB peut donc partir EN MÊME TEMPS que l'upload du
+      // fichier au lieu d'attendre sa fin.
       const { data: urlData } = supabase.storage
         .from('photos')
         .getPublicUrl(fileName);
 
       const photoUrl = urlData.publicUrl;
 
-      const { data: newItem, error: insertError } = await supabase
-        .from('capture_items')
-        .insert({
-          chantier_id: chantier.id,
-          type: 'photo',
-          position: nextPosition,
-          photo_url: photoUrl,
-        })
-        .select()
-        .single();
+      const [uploadRes, insertRes] = await Promise.allSettled([
+        uploadWithRetry(supabase, 'photos', fileName, compressedBlob, 'image/jpeg'),
+        supabase
+          .from('capture_items')
+          .insert({
+            chantier_id: chantier.id,
+            type: 'photo',
+            position: nextPosition,
+            photo_url: photoUrl,
+          })
+          .select()
+          .single(),
+      ]);
 
-      if (insertError) throw insertError;
+      const insertOk = insertRes.status === 'fulfilled' && !insertRes.value.error;
+      const newItem = insertOk ? insertRes.value.data : null;
+
+      if (uploadRes.status === 'rejected') {
+        // L'upload a définitivement échoué (3 tentatives) : on retire l'item
+        // éventuellement inséré pour ne pas laisser une photo sans fichier.
+        if (newItem) {
+          await supabase.from('capture_items').delete().eq('id', newItem.id);
+        }
+        throw uploadRes.reason;
+      }
+
+      if (!insertOk) {
+        throw insertRes.status === 'fulfilled' ? insertRes.value.error : insertRes.reason;
+      }
 
       const photoItem = newItem as CaptureItemType;
       setItems((prev) => [...prev, photoItem]);
