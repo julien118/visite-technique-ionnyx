@@ -22,7 +22,7 @@ const config: Config = {
         'focus-ring': 'rgba(16, 185, 129, 0.15)',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['var(--font-inter)', 'system-ui', '-apple-system', 'sans-serif'],
       },
       keyframes: {
         'slide-up': {

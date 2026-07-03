@@ -1,8 +1,19 @@
 import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 import ToastProvider from "@/components/ToastProvider";
 import AssistantGate from "@/components/AssistantGate";
 import { nomContact, nomDeploiement } from "@/lib/notify";
 import "./globals.css";
+
+// Inter auto-hébergée par next/font (variable font, subset latin) : remplace
+// l'@import Google Fonts de globals.css qui bloquait le rendu d'un aller-retour
+// vers fonts.googleapis.com sur la 4G. Exposée en variable CSS pour Tailwind
+// (font-sans) et le font-family de globals.css.
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter",
+});
 
 export const metadata: Metadata = {
   title: "MTC37 — Système 30 Secondes",
@@ -40,7 +51,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr">
+    <html lang="fr" className={inter.variable}>
       {/* App-shell (parité ATG) : hauteur viewport figée + UN SEUL conteneur
           scrollable au milieu → évite le double-scroll iOS. Le bg/texte/safe-area
           et la fonte viennent de globals.css (@layer base). */}
