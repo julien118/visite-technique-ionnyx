@@ -47,14 +47,13 @@ function heureParis(now: Date): number {
 }
 
 export async function GET(request: NextRequest) {
-  // Sécurité : si RELANCES_SECRET est défini, on l'exige (header Bearer OU ?key=).
+  // Fail-closed : on EXIGE RELANCES_SECRET (header Bearer OU ?key=). Le cron externe
+  // (cron-job.org) doit l'envoyer ; sans secret configuré, on refuse tout accès.
   const secret = process.env.RELANCES_SECRET?.trim()
-  if (secret) {
-    const bearer = request.headers.get('authorization') === `Bearer ${secret}`
-    const query = request.nextUrl.searchParams.get('key') === secret
-    if (!bearer && !query) {
-      return NextResponse.json({ ok: false, error: 'non_autorise' }, { status: 401 })
-    }
+  const bearer = !!secret && request.headers.get('authorization') === `Bearer ${secret}`
+  const query = !!secret && request.nextUrl.searchParams.get('key') === secret
+  if (!secret || (!bearer && !query)) {
+    return NextResponse.json({ ok: false, error: 'non_autorise' }, { status: 401 })
   }
 
   const now = new Date()

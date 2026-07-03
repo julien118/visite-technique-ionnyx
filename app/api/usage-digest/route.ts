@@ -8,8 +8,9 @@ import { reportError } from '@/lib/monitoring';
 //   GET /api/usage-digest?period=week   (ou month)
 //   -> renvoie l'aperçu du message ET l'envoie sur Telegram.
 export async function GET(request: NextRequest) {
+  // Fail-closed : on EXIGE CRON_SECRET (Bearer). Sans secret configuré, on refuse.
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+  if (!cronSecret || request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ ok: false, error: 'Non autorisé' }, { status: 401 });
   }
 

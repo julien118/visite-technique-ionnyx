@@ -14,10 +14,11 @@ import { reportError } from '@/lib/monitoring';
 const PREFERRED_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
 
 export async function GET(request: NextRequest) {
-  // Protection optionnelle : si CRON_SECRET est défini, on exige le header que
-  // Vercel Cron envoie automatiquement.
+  // Fail-closed : on EXIGE CRON_SECRET (Vercel Cron envoie ce Bearer automatiquement
+  // dès que la variable est définie). Sans secret configuré, on refuse — plus de
+  // fenêtre « endpoint ouvert » si la variable venait à manquer.
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+  if (!cronSecret || request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ ok: false, error: 'Non autorisé' }, { status: 401 });
   }
 

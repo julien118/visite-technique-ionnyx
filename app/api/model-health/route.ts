@@ -10,10 +10,10 @@ import { NextRequest, NextResponse } from 'next/server';
 const PREFERRED_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
 
 export async function GET(request: NextRequest) {
-  // Protection optionnelle : si CRON_SECRET est défini, on exige le header que
-  // Vercel Cron envoie automatiquement. Sinon, endpoint ouvert (probe inoffensif).
+  // Fail-closed : on EXIGE CRON_SECRET (Bearer, envoyé automatiquement par Vercel
+  // Cron). Sans secret configuré, on refuse — endpoint fermé par défaut.
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+  if (!cronSecret || request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ ok: false, error: 'Non autorisé' }, { status: 401 });
   }
 
