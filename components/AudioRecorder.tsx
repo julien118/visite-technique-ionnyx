@@ -22,9 +22,17 @@ export default function AudioRecorder({ onRecordingComplete, disabled, onRecordi
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Mono + 32 kbps : le seul consommateur est la transcription Whisper, qui
+      // resample tout en 16 kHz mono — l'opus voix à 32 kbps est transparent
+      // pour elle (vérifié : transcription identique au 128 kbps stéréo) mais
+      // pèse ~4× moins sur la 4G de chantier. Les navigateurs qui ignorent ces
+      // hints retombent sur leur défaut (comportement d'avant).
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1 },
+      });
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: 'audio/webm;codecs=opus',
+        audioBitsPerSecond: 32000,
       });
 
       chunksRef.current = [];
