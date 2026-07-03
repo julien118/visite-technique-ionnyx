@@ -189,17 +189,15 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
       const fileName = `${userId}/${chantier.id}/${Date.now()}.webm`;
       await uploadWithRetry(supabase, 'audio', fileName, audioBlob, 'audio/webm');
 
-      const { data: urlData } = await supabase.storage
-        .from('audio')
-        .createSignedUrl(fileName, 60 * 60 * 24 * 365);
-
-      const audioUrl = urlData?.signedUrl || '';
-
+      // L'audio n'est jamais rejoué dans l'app (seule la transcription sert) : on
+      // stocke le CHEMIN storage plutôt qu'un lien signé 1 an. Plus aucun lien
+      // longue durée à fuiter. Le bucket 'audio' reste privé ; si un jour on rejoue
+      // l'audio, on générera un lien signé court à la volée côté serveur (RLS).
       const insertData: Record<string, unknown> = {
         chantier_id: chantier.id,
         type: 'vocal',
         position: nextPosition,
-        audio_url: audioUrl,
+        audio_url: fileName,
         transcription: null,
       };
 

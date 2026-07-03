@@ -2,6 +2,18 @@ import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { reportError } from '@/lib/monitoring';
 
+// Retrouve le chemin storage à partir de la valeur stockée en base, qui peut être :
+//  - un CHEMIN brut (nouveau format audio : "userId/chantierId/xxx.webm"),
+//  - une URL Supabase publique/signée (photos + anciens audios :
+//    ".../object/(public|sign)/<bucket>/<path>?token=..."). Le [^?]+ tronque le
+//    éventuel "?token=..." (sinon l'ancien nettoyage d'audio échouait silencieusement).
+function storagePath(value: string, bucket: string): string | null {
+  const m = value.match(new RegExp(`/storage/v1/object/(?:public|sign)/${bucket}/([^?]+)`));
+  if (m) return decodeURIComponent(m[1]);
+  if (!value.includes('://')) return value.replace(/^\/+/, '');
+  return null;
+}
+
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -27,13 +39,12 @@ export async function DELETE(
 
     for (const item of items) {
       if (item.type === 'vocal' && item.audio_url) {
-        // Extraire le path relatif depuis l'URL Supabase
-        const match = item.audio_url.match(/\/storage\/v1\/object\/(?:public|sign)\/audio\/(.+)/);
-        if (match) audioFiles.push(match[1]);
+        const p = storagePath(item.audio_url, 'audio');
+        if (p) audioFiles.push(p);
       }
       if (item.type === 'photo' && item.photo_url) {
-        const match = item.photo_url.match(/\/storage\/v1\/object\/(?:public|sign)\/photos\/(.+)/);
-        if (match) photoFiles.push(match[1]);
+        const p = storagePath(item.photo_url, 'photos');
+        if (p) photoFiles.push(p);
       }
     }
 
