@@ -187,7 +187,20 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
 
     try {
       const fileName = `${userId}/${chantier.id}/${Date.now()}.webm`;
+      // Le blob ne monte QU'UNE FOIS sur la 4G (vers Storage). La transcription
+      // relit ensuite le fichier côté serveur ({ path }) au lieu de faire
+      // re-payer l'uplink au client une seconde fois.
       await uploadWithRetry(supabase, 'audio', fileName, audioBlob, 'audio/webm');
+
+      // Transcription lancée SANS attendre l'insert : les deux tournent en
+      // parallèle — l'item s'affiche dès l'insert, le texte arrive ensuite.
+      const transcribePromise = fetch('/api/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: fileName }),
+      });
+      // Évite une unhandled rejection si l'insert échoue avant l'await.
+      transcribePromise.catch(() => {});
 
       // L'audio n'est jamais rejoué dans l'app (seule la transcription sert) : on
       // stocke le CHEMIN storage plutôt qu'un lien signé 1 an. Plus aucun lien
@@ -217,13 +230,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
       setItems((prev) => [...prev, captureItem]);
       scrollToBottom(true);
 
-      const formData = new FormData();
-      formData.append('file', audioBlob, 'audio.webm');
-
-      const transcribeResponse = await fetch('/api/transcribe', {
-        method: 'POST',
-        body: formData,
-      });
+      const transcribeResponse = await transcribePromise;
 
       if (!transcribeResponse.ok) throw new Error('Erreur transcription');
 

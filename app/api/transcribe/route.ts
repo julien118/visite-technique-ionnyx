@@ -6,6 +6,11 @@ import { createClient } from '@/lib/supabase/server';
 // donc ce plafond large suffit à couper tout abus de coût sur cet endpoint.
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
+// Le relais vers Groq (et le téléchargement Storage en mode { path }) peut
+// dépasser le timeout par défaut sur un gros fichier — même valeur que
+// generate-report.
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   try {
     // Auth : le middleware exclut /api, donc la garde se fait ICI. Sans elle,
@@ -16,14 +21,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
     }
 
-    const formData = await request.formData();
-    const audioFile = formData.get('file');
+    // Deux modes d'entrée :
+    // - JSON { path } : l'audio de la visite est DÉJÀ dans le bucket `audio`
+    //   (uploadé une seule fois par le client) — on le relit ici côté serveur
+    //   au lieu de faire repayer l'uplink 4G au client une seconde fois.
+    // - multipart file : blob direct (assistants ticket/devis, compat).
+    let audioFile: Blob;
 
-    if (!audioFile || !(audioFile instanceof Blob)) {
-      return NextResponse.json(
-        { error: 'Aucun fichier audio fourni' },
-        { status: 400 }
-      );
+    if (request.headers.get('content-type')?.includes('application/json')) {
+      const { path } = await request.json();
+
+      // Le chemin est de la forme {userId}/{chantierId}/{timestamp}.webm : on
+      // n'accepte que les fichiers de l'utilisateur connecté (en plus de la RLS
+      // Storage qui s'applique via le client session).
+      if (typeof path !== 'string' || !path.startsWith(`${user.id}/`)) {
+        return NextResponse.json({ error: 'Chemin audio invalide' }, { status: 403 });
+      }
+
+      const { data: blob, error: downloadError } = await supabase.storage
+        .from('audio')
+        .download(path);
+
+      if (downloadError || !blob) {
+        return NextResponse.json({ error: 'Audio introuvable' }, { status: 404 });
+      }
+      audioFile = blob;
+    } else {
+      const formData = await request.formData();
+      const file = formData.get('file');
+
+      if (!file || !(file instanceof Blob)) {
+        return NextResponse.json(
+          { error: 'Aucun fichier audio fourni' },
+          { status: 400 }
+        );
+      }
+      audioFile = file;
     }
 
     if (audioFile.size > MAX_AUDIO_BYTES) {
