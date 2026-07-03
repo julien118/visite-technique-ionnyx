@@ -74,7 +74,18 @@ export async function generateReport(
         model,
         max_tokens: 32000,
         stream: true,
-        system: SYSTEM_PROMPT_RAPPORT,
+        // cache_control : le prompt système (~1,1k tokens, identique à chaque
+        // génération) est mis en cache côté Anthropic → TTFT réduit et coût
+        // input ÷10 sur la part cachée pour les générations rapprochées.
+        // Ignoré silencieusement si le prompt est sous le minimum cacheable.
+        // Le texte envoyé au modèle est strictement le même.
+        system: [
+          {
+            type: 'text',
+            text: SYSTEM_PROMPT_RAPPORT,
+            cache_control: { type: 'ephemeral' },
+          },
+        ],
         messages: [
           { role: 'user', content: userPrompt },
         ],
