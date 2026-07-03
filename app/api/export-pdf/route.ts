@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { reportError } from '@/lib/monitoring';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { createClient } from '@/lib/supabase/server';
 import { RapportContenu } from '@/lib/types';
 import { nomDeploiement } from '@/lib/notify';
 import jsPDF from 'jspdf';
@@ -24,19 +23,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'chantierId manquant' }, { status: 400 });
     }
 
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        cookies: {
-          getAll() { return cookieStore.getAll(); },
-          setAll() {},
-        },
-      }
-    );
+    // Client SESSION (anon + RLS) : le middleware exclut /api, donc l'auth se fait
+    // ICI. La RLS garantit qu'on n'exporte QUE le rapport d'un chantier appartenant
+    // à l'utilisateur (fini le service-role qui bypassait toute isolation → PII).
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+    }
 
-    // Récupérer le rapport
+    // Récupérer le rapport (RLS : ne renvoie la ligne que si le chantier lié
+    // appartient à l'utilisateur courant — sinon 0 ligne → 404 plus bas).
     const { data: rapport, error } = await supabase
       .from('rapports')
       .select('contenu_json')
