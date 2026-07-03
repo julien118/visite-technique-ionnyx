@@ -41,7 +41,8 @@ Pour re-synchroniser depuis ATG si besoin : télécharger `/favicon-16.png`, `/f
 - **Capture terrain (feature core)** — Timeline verticale chronologique mixant vocaux et photos
 - **Génération de rapport IA** — Claude (modèle via env `ANTHROPIC_MODEL`, défaut `claude-sonnet-4-6`) avec corrélation photos/observations
 - **Affichage du rapport** — Observations groupées, édition inline, viewer photo plein écran
-- **Export PDF** — Téléchargement local via html2canvas + jspdf
+- **Export PDF (rapport)** — Généré **côté serveur** via jsPDF (`/api/export-pdf`). Personnalisé MTC37 (parité ATG) : logo `public/logo-mtc37.png` en en-tête sur la bande noire (chargé via l'origine de la requête — le middleware exclut les `.png`), « RAPPORT DE VISITE » + date alignés à droite, **sans footer** (retiré 03/07), nom de fichier `compte-rendu-<client>-<date>.pdf`.
+- **Salutation personnalisée** — « Bonjour / Bon après-midi / Bonsoir {prénom} » discret en tête de la liste des chantiers, adapté à l'heure (calcul côté client → anti-hydratation). Prénom via env `CONTACT_NOM` (défaut « Hendrix »), multi-tenant.
 - **Export pCloud** — Envoi du rapport PDF vers pCloud (dossier "2 ETUDES-DEVIS"), connexion par token (mot de passe jamais stocké). API /api/pcloud/*.
 - **Suppression en cascade** — API DELETE /api/chantiers/[id] : supprime chantier + capture_items + rapport + fichiers Storage (audio + photos). RLS protège les données.
 - **Résilience modèle IA** — Si Anthropic retire le modèle (404), bascule auto sur un repli (`MODEL_CHAIN` : sonnet-4-6 → sonnet-4-5 → opus-4-8) → jamais de coupure. Modèle surchargeable sans redéploiement via env `ANTHROPIC_MODEL`.
@@ -81,6 +82,8 @@ Pour re-synchroniser depuis ATG si besoin : télécharger `/favicon-16.png`, `/f
 | **Résilience modèle** | Chaîne de repli `MODEL_CHAIN` + canari `/api/model-health` | Anthropic retire ses snapshots ~1 an après leur sortie → jamais de coupure + alerte |
 
 ### Note technique
+- **PDF du rapport = jsPDF côté SERVEUR** (`/api/export-pdf`), PAS html2canvas côté client (la ligne « PDF » du tableau §2 reflète un état antérieur). En-tête personnalisé MTC37 (logo + parité ATG), sans footer.
+- **Footer retiré (03/07)** car il affichait « Rapport généré par MTC37 — Hendrix » : l'env **prod `DEPLOYMENT_NAME` = « MTC37 — Hendrix »** (utilisé aussi par les en-têtes Telegram via `nomDeploiement()`). À garder en tête si on réintroduit un footer un jour.
 - Le fichier `lib/openai.ts` est mal nommé — contient en réalité le client Anthropic (clé `ANTHROPIC_API_KEY` = `sk-ant-…`, **PAS** une clé OpenAI). Héritage du switch GPT-4.1 → Claude, renommage pas encore fait. Confusion confirmée en Session 5.
 
 ---
@@ -123,4 +126,4 @@ Pour re-synchroniser depuis ATG si besoin : télécharger `/favicon-16.png`, `/f
 
 ---
 
-*Dernière mise à jour : 2026-06-16 — **Session 5** : fix prod critique (modèle Sonnet 4 retiré → `claude-sonnet-4-6`) + résilience modèle (chaîne de repli + canari), export pCloud documenté, **digests usage/coût $/€ + alertes modèle & erreurs sur Telegram** (multi-tenant, voir `SURVEILLANCE.md`), rotation des clés Anthropic + Groq vérifiée (dev + prod). — Session 4 : déploiement GitHub/Vercel, header dynamique, suppression chantier, filtres/recherche, refonte design liste.*
+*Dernière mise à jour : 2026-07-03 — **Session 6** : personnalisation du rapport PDF (logo MTC37 en en-tête, parité ATG, **footer « Rapport généré par… » retiré**, nom de fichier `compte-rendu-<client>-<date>.pdf`), salutation contextuelle « Bonjour Hendrix » (heure, côté client), le tout déployé en prod. Deploy fait depuis un **git worktree isolé** pour ne pas embarquer le WIP non commité de Julien. Gotchas : l'outil Edit normalise les échappements Unicode → classe `[^\x00-\x7f]` pour dé-accentuer ; PDF rapport = jsPDF serveur (pas html2canvas). — **Session 5** : fix prod critique (modèle Sonnet 4 retiré → `claude-sonnet-4-6`) + résilience modèle (chaîne de repli + canari), export pCloud documenté, **digests usage/coût $/€ + alertes modèle & erreurs sur Telegram** (multi-tenant, voir `SURVEILLANCE.md`), rotation des clés Anthropic + Groq vérifiée (dev + prod). — Session 4 : déploiement GitHub/Vercel, header dynamique, suppression chantier, filtres/recherche, refonte design liste.*
