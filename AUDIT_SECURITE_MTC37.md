@@ -95,7 +95,10 @@ Le socle est **sain** : RLS stricte sur toutes les tables utilisateur, aucun sec
   - `dompurify` (MODERATE, via `html2canvas`) — corrigeable **sans casse**.
   - `next` 14.2.35 (HIGH) + `postcss` (MODERATE) — correctif disponible **uniquement via Next.js 16 (semver major, breaking)**.
 - **Impact** : CVE DoS / XSS potentielles selon la surface exploitée.
-- **Correctif** : appliquer les patches sûrs (`ws`, `dompurify`) sur la branche ; traiter Next.js 16 comme une **tâche séparée** avec régression complète (voir « Actions manuelles »).
+- **Correctif (✅ APPLIQUÉ + DÉPLOYÉ)** :
+  - `ws` (HIGH) + `dompurify` (MODERATE) : patchés via `npm audit fix`.
+  - **Next.js 14 → 16.2.10** + React 18 → 19 + ESLint 8 → 9 : les CVE **HIGH de Next (DoS/SSRF/cache poisoning) sont corrigées**. Build figé sur `--webpack` (Turbopack échoue sur `/_not-found`), config ESLint migrée en flat native. Vérifié : build local + build Vercel + runtime (login/redirect/API 401/noindex) + typecheck/lint verts. **En production.**
+  - **Résiduel non corrigeable** : un `postcss` MODERATE reste **imbriqué dans le bundle de Next 16.2.10** (aucune version stable de Next ne l'a encore mis à jour). **Non exploitable ici** : postcss ne traite que le CSS Tailwind du projet au build, aucune entrée hostile. Disparaîtra avec une future release de Next.
 
 ---
 
@@ -136,7 +139,7 @@ Le socle est **sain** : RLS stricte sur toutes les tables utilisateur, aucun sec
 - **Rotation de secrets** : **aucun secret fuité** détecté (code + historique git) → **aucune rotation strictement requise**. À ne faire que si une clé a été partagée hors du système.
 - ~~**Poser `CRON_SECRET` et `RELANCES_SECRET` dans Vercel**~~ → **déjà fait** (vérifié via `vercel env ls` : les deux existent en Production + Preview). Après déploiement de la branche, **vérifier que les crons répondent 200** : le cron Vercel (`/api/cron`) automatiquement, et le cron externe (cron-job.org sur `/api/relances`) doit toujours transmettre `RELANCES_SECRET` — c'est déjà le cas aujourd'hui (sinon il recevrait 401 avec le code actuel).
 - **Vérification RLS live** : le MCP Supabase ne voit pas le projet MTC37 (`xuprrfhxwpkyhucgmqmg`) → lancer `get_advisors` / inspecter `pg_policies` depuis le dashboard Supabase du bon projet.
-- **Décider de l'upgrade Next.js 16** (tâche séparée, régression complète).
+- ~~**Décider de l'upgrade Next.js 16**~~ → **fait et déployé** (Next 16.2.10 + React 19). Suivis mineurs laissés : renommer `middleware.ts` → `proxy.ts` (dépréciation Next 16, encore fonctionnel), et revoir Turbopack (build figé sur webpack en attendant).
 - **Vérifier `NEXT_PUBLIC_SENTRY_DSN`** défini en production.
 - Décisions design : chiffrement token pCloud (M4), TTL audio à la volée (M5), confidentialité du bucket photos (L1).
 
