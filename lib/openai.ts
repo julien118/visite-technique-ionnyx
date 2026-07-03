@@ -1,5 +1,6 @@
 // Helper pour l'API Anthropic Claude
 
+import { after } from 'next/server';
 import { RapportContenu } from './types';
 import { SYSTEM_PROMPT_RAPPORT, buildUserPrompt } from './prompts';
 import { logAnthropicUsage } from './usage';
@@ -97,8 +98,10 @@ export async function generateReport(
     const parsed: RapportContenu = JSON.parse(jsonMatch[0]);
 
     // Journalise la consommation (tokens + coût Anthropic) pour les digests
-    // hebdo/mensuels. Non bloquant : logAnthropicUsage n'échoue jamais.
-    await logAnthropicUsage(model, result.usage || {}, chantier.id);
+    // hebdo/mensuels — APRÈS la réponse HTTP (after garantit l'exécution sans
+    // retarder l'utilisateur d'un aller-retour DB). logAnthropicUsage n'échoue
+    // jamais.
+    after(logAnthropicUsage(model, result.usage || {}, chantier.id));
 
     // Si on a dû utiliser un modèle de repli, on le signale clairement dans les
     // logs (le canari /api/model-health alerte aussi) pour mettre à jour

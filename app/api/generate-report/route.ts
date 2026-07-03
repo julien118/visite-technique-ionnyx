@@ -25,23 +25,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
     }
 
-    // Récupérer le chantier
-    const { data: chantier, error: chantierError } = await supabase
-      .from('chantiers')
-      .select('*')
-      .eq('id', chantierId)
-      .single();
+    // Récupérer le chantier et les éléments captés EN PARALLÈLE : les deux
+    // requêtes sont indépendantes, et chaque aller-retour Supabase coûte cher
+    // depuis la région des fonctions (RLS filtre chacune côté base).
+    const [
+      { data: chantier, error: chantierError },
+      { data: items, error: itemsError },
+    ] = await Promise.all([
+      supabase.from('chantiers').select('*').eq('id', chantierId).single(),
+      supabase
+        .from('capture_items')
+        .select('*')
+        .eq('chantier_id', chantierId)
+        .order('position', { ascending: true }),
+    ]);
 
     if (chantierError || !chantier) {
       return NextResponse.json({ error: 'Chantier introuvable' }, { status: 404 });
     }
-
-    // Récupérer TOUS les éléments captés triés par position
-    const { data: items, error: itemsError } = await supabase
-      .from('capture_items')
-      .select('*')
-      .eq('chantier_id', chantierId)
-      .order('position', { ascending: true });
 
     if (itemsError) {
       return NextResponse.json({ error: 'Erreur récupération des éléments' }, { status: 500 });
@@ -95,50 +96,36 @@ export async function POST(request: NextRequest) {
 
     const nbPhotosDansRapport = photosInRapport.size + missingPhotos.length;
 
-    // Logger les stats de génération
-    try {
-      await supabase.from('generation_logs').insert({
+    // Écritures finales EN PARALLÈLE : stats (best-effort, la table
+    // generation_logs peut ne pas exister — supabase-js ne throw pas, l'erreur
+    // est ignorée comme avant), rapport et statut sont indépendants.
+    // L'upsert remplace l'ancien select + update/insert (2 allers-retours → 1) :
+    // l'index unique idx_rapports_chantier_id garantit un seul rapport par
+    // chantier, et contenu_html/pdf_url sont remis à null comme avant pour
+    // invalider le PDF d'une éventuelle génération précédente.
+    await Promise.all([
+      supabase.from('generation_logs').insert({
         chantier_id: chantierId,
         nb_photos_envoyees: nbPhotosEnvoyees,
         nb_photos_dans_rapport: nbPhotosDansRapport,
         nb_vocaux_envoyes: nbVocauxEnvoyes,
         nb_photos_manquantes: missingPhotos.length,
         statut: missingPhotos.length === 0 ? 'ok' : 'photos_ajoutees',
-      });
-    } catch {
-      // La table generation_logs n'existe peut-être pas encore, on continue
-    }
-
-    // Sauvegarder ou mettre à jour le rapport en BDD
-    const { data: existingRapport } = await supabase
-      .from('rapports')
-      .select('id')
-      .eq('chantier_id', chantierId)
-      .single();
-
-    if (existingRapport) {
-      await supabase
-        .from('rapports')
-        .update({
+      }),
+      supabase.from('rapports').upsert(
+        {
+          chantier_id: chantierId,
           contenu_json: rapportContenu,
           contenu_html: null,
           pdf_url: null,
-        })
-        .eq('id', existingRapport.id);
-    } else {
-      await supabase
-        .from('rapports')
-        .insert({
-          chantier_id: chantierId,
-          contenu_json: rapportContenu,
-        });
-    }
-
-    // Mettre à jour le statut du chantier
-    await supabase
-      .from('chantiers')
-      .update({ statut: 'rapport_genere' })
-      .eq('id', chantierId);
+        },
+        { onConflict: 'chantier_id' }
+      ),
+      supabase
+        .from('chantiers')
+        .update({ statut: 'rapport_genere' })
+        .eq('id', chantierId),
+    ]);
 
     return NextResponse.json({ rapport: rapportContenu });
   } catch (error) {
