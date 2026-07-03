@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { reportError } from '@/lib/monitoring';
+import { createClient } from '@/lib/supabase/server';
+
+// Groq Whisper accepte jusqu'à ~25 Mo ; l'audio est compressé côté client (opus),
+// donc ce plafond large suffit à couper tout abus de coût sur cet endpoint.
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
   try {
+    // Auth : le middleware exclut /api, donc la garde se fait ICI. Sans elle,
+    // n'importe qui pourrait consommer le quota/facturation Groq (endpoint ouvert).
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+    }
+
     const formData = await request.formData();
     const audioFile = formData.get('file');
 
@@ -10,6 +23,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Aucun fichier audio fourni' },
         { status: 400 }
+      );
+    }
+
+    if (audioFile.size > MAX_AUDIO_BYTES) {
+      return NextResponse.json(
+        { error: 'Fichier audio trop volumineux' },
+        { status: 413 }
       );
     }
 
