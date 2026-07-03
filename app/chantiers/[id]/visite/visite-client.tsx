@@ -51,6 +51,16 @@ function isDisplayGroup(item: CaptureItemType | DisplayGroup): item is DisplayGr
   return 'photo' in item && 'linkedVocal' in item;
 }
 
+// Pastille discrète sur une photo optimiste dont l'envoi est encore en vol.
+function BadgeEnvoi() {
+  return (
+    <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white">
+      <div className="h-3 w-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+      Envoi…
+    </div>
+  );
+}
+
 // Upload avec retry (3 tentatives, backoff exponentiel)
 async function uploadWithRetry(
   supabase: ReturnType<typeof createClient>,
@@ -82,7 +92,17 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
   const router = useRouter();
   const supabase = createClient();
   const [items, setItems] = useState<CaptureItemType[]>(initialItems);
-  const [processing, setProcessing] = useState(false);
+  // File de captures non bloquante : plus de booléen global — chaque capture
+  // s'affiche immédiatement (item optimiste `temp-…`) et suit son propre envoi
+  // en arrière-plan. pendingCount sert aux gardes (fermeture d'onglet, bouton
+  // « Générer le rapport »).
+  const [pendingCount, setPendingCount] = useState(0);
+  const tempSeqRef = useRef(0);
+  const nextPositionRef = useRef<number | null>(null);
+  // tempId photo → promesse de la ligne DB réelle : un vocal « décrire cette
+  // photo » enregistré pendant l'upload attend ici l'id réel pour se lier.
+  const photoInsertPromises = useRef(new Map<string, Promise<CaptureItemType>>());
+  const objectUrlsRef = useRef<string[]>([]);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const mainRef = useRef<HTMLDivElement>(null);
@@ -94,12 +114,21 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
   const describeTimerRef = useRef<NodeJS.Timeout | null>(null);
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const showDescribeButton = describeCountdown > 0 && !isRecording && !processing;
+  const showDescribeButton = describeCountdown > 0 && !isRecording;
 
   const photoCount = items.filter((i) => i.type === 'photo').length;
   const vocalCount = items.filter((i) => i.type === 'vocal').length;
-  const nextPosition = items.length > 0 ? Math.max(...items.map((i) => i.position)) + 1 : 1;
   const displayGroups = buildDisplayGroups(items);
+
+  // Position allouée à l'enqueue (compteur local) : plusieurs captures peuvent
+  // partir en même temps sans attendre le round-trip DB de la précédente.
+  function allocPosition() {
+    if (nextPositionRef.current === null) {
+      nextPositionRef.current =
+        items.length > 0 ? Math.max(...items.map((i) => i.position)) + 1 : 1;
+    }
+    return nextPositionRef.current++;
+  }
 
   // Scroll vers le bas — cible directement scrollTop du conteneur (fiable iOS Safari)
   const scrollToBottom = useCallback((force = false) => {
@@ -136,6 +165,26 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
     return () => {
       if (describeTimerRef.current) clearTimeout(describeTimerRef.current);
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    };
+  }, []);
+
+  // Des envois sont en vol : prévenir avant de fermer/recharger l'onglet
+  // (la navigation interne reste libre, seul « Terminer » est gardé plus bas).
+  useEffect(() => {
+    if (pendingCount === 0) return;
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [pendingCount]);
+
+  // Libère les vignettes optimistes (objectURL) au démontage.
+  useEffect(() => {
+    const urls = objectUrlsRef.current;
+    return () => {
+      urls.forEach((u) => URL.revokeObjectURL(u));
     };
   }, []);
 
@@ -181,9 +230,27 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
   }
 
   async function handleRecordingComplete(audioBlob: Blob) {
-    setProcessing(true);
     const linkedPhoto = shouldLinkToPhoto();
     cancelDescribeMode();
+
+    // Item optimiste : visible immédiatement (le spinner « Transcription en
+    // cours… » existant s'affiche via transcription: null), remplacé par la
+    // ligne DB dès l'insert. Hendrix peut enchaîner sans attendre.
+    const tempId = `temp-vocal-${++tempSeqRef.current}`;
+    const tempItem: CaptureItemType = {
+      id: tempId,
+      chantier_id: chantier.id,
+      type: 'vocal',
+      position: allocPosition(),
+      audio_url: null,
+      transcription: null,
+      photo_url: null,
+      linked_photo_id: linkedPhoto?.id ?? null,
+      created_at: new Date().toISOString(),
+    };
+    setItems((prev) => [...prev, tempItem]);
+    setPendingCount((c) => c + 1);
+    scrollToBottom(true);
 
     try {
       const fileName = `${userId}/${chantier.id}/${Date.now()}.webm`;
@@ -193,7 +260,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
       await uploadWithRetry(supabase, 'audio', fileName, audioBlob, 'audio/webm');
 
       // Transcription lancée SANS attendre l'insert : les deux tournent en
-      // parallèle — l'item s'affiche dès l'insert, le texte arrive ensuite.
+      // parallèle — le texte arrive dès que possible.
       const transcribePromise = fetch('/api/transcribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -202,6 +269,17 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
       // Évite une unhandled rejection si l'insert échoue avant l'await.
       transcribePromise.catch(() => {});
 
+      // Si la photo à lier est encore un item optimiste, attendre son id réel
+      // (sa création DB est en vol). Si sa création a échoué : vocal solo.
+      let linkedPhotoId = linkedPhoto?.id ?? null;
+      if (linkedPhotoId && photoInsertPromises.current.has(linkedPhotoId)) {
+        try {
+          linkedPhotoId = (await photoInsertPromises.current.get(linkedPhotoId)!).id;
+        } catch {
+          linkedPhotoId = null;
+        }
+      }
+
       // L'audio n'est jamais rejoué dans l'app (seule la transcription sert) : on
       // stocke le CHEMIN storage plutôt qu'un lien signé 1 an. Plus aucun lien
       // longue durée à fuiter. Le bucket 'audio' reste privé ; si un jour on rejoue
@@ -209,13 +287,13 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
       const insertData: Record<string, unknown> = {
         chantier_id: chantier.id,
         type: 'vocal',
-        position: nextPosition,
+        position: tempItem.position,
         audio_url: fileName,
         transcription: null,
       };
 
-      if (linkedPhoto) {
-        insertData.linked_photo_id = linkedPhoto.id;
+      if (linkedPhotoId) {
+        insertData.linked_photo_id = linkedPhotoId;
       }
 
       const { data: newItem, error: insertError } = await supabase
@@ -227,8 +305,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
       if (insertError) throw insertError;
 
       const captureItem = newItem as CaptureItemType;
-      setItems((prev) => [...prev, captureItem]);
-      scrollToBottom(true);
+      setItems((prev) => prev.map((i) => (i.id === tempId ? captureItem : i)));
 
       const transcribeResponse = await transcribePromise;
 
@@ -248,17 +325,45 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
       );
     } catch (err) {
       console.error('Erreur vocal:', err);
+      // Échec avant l'insert : on retire l'item optimiste. Si l'insert avait
+      // réussi (échec de transcription seule), tempId n'est plus dans la liste
+      // et l'observation reste, sans texte — comme avant.
+      setItems((prev) => prev.filter((i) => i.id !== tempId));
       alert('Erreur lors de l\'enregistrement vocal. Réessayez.');
     } finally {
-      setProcessing(false);
+      setPendingCount((c) => c - 1);
     }
   }
 
   async function handlePhotoTaken(file: File) {
-    setProcessing(true);
     cancelDescribeMode();
 
-    try {
+    // Vignette optimiste immédiate (objectURL local, avant même la
+    // compression) : Hendrix voit sa photo en < 1 s et peut la décrire tout de
+    // suite pendant que compression + upload partent en arrière-plan.
+    const tempId = `temp-photo-${++tempSeqRef.current}`;
+    const previewUrl = URL.createObjectURL(file);
+    objectUrlsRef.current.push(previewUrl);
+    const tempItem: CaptureItemType = {
+      id: tempId,
+      chantier_id: chantier.id,
+      type: 'photo',
+      position: allocPosition(),
+      audio_url: null,
+      transcription: null,
+      photo_url: previewUrl,
+      linked_photo_id: null,
+      created_at: new Date().toISOString(),
+    };
+    setItems((prev) => [...prev, tempItem]);
+    setPendingCount((c) => c + 1);
+    scrollToBottom(true);
+    // Le compte à rebours « Décrire cette photo » démarre tout de suite (plus
+    // besoin d'attendre l'upload) ; un vocal lié pendant l'envoi résoudra l'id
+    // réel via photoInsertPromises.
+    startDescribeCountdown(tempItem);
+
+    const insertPromise = (async () => {
       const compressedBlob = await compressImage(file);
 
       const fileName = `${userId}/${chantier.id}/${Date.now()}.jpg`;
@@ -279,7 +384,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
           .insert({
             chantier_id: chantier.id,
             type: 'photo',
-            position: nextPosition,
+            position: tempItem.position,
             photo_url: photoUrl,
           })
           .select()
@@ -302,20 +407,42 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
         throw insertRes.status === 'fulfilled' ? insertRes.value.error : insertRes.reason;
       }
 
-      const photoItem = newItem as CaptureItemType;
-      setItems((prev) => [...prev, photoItem]);
-      scrollToBottom(true);
+      return newItem as CaptureItemType;
+    })();
+    photoInsertPromises.current.set(tempId, insertPromise);
 
-      startDescribeCountdown(photoItem);
+    try {
+      const photoItem = await insertPromise;
+      setItems((prev) =>
+        prev.map((i) => {
+          // On garde l'objectURL local à l'écran (image déjà décodée) : pas de
+          // re-téléchargement de la pleine résolution sur la 4G. La DB, elle,
+          // a bien l'URL publique.
+          if (i.id === tempId) return { ...photoItem, photo_url: previewUrl };
+          // Un vocal optimiste peut pointer vers l'id temporaire : re-lier.
+          if (i.linked_photo_id === tempId) return { ...i, linked_photo_id: photoItem.id };
+          return i;
+        })
+      );
+      // Si le mode « décrire » référence encore l'item temporaire, un vocal
+      // enregistré maintenant doit partir avec l'id réel.
+      setLastPhotoItem((prev) => (prev?.id === tempId ? photoItem : prev));
     } catch (err) {
       console.error('Erreur photo:', err);
+      setItems((prev) => prev.filter((i) => i.id !== tempId));
+      // La photo n'existe plus : ne pas laisser un « Décrire cette photo »
+      // pointer dans le vide (annule au pire un compte à rebours plus récent).
+      cancelDescribeMode();
       alert('Erreur lors de la prise de photo. Réessayez.');
     } finally {
-      setProcessing(false);
+      setPendingCount((c) => c - 1);
     }
   }
 
   async function handleDelete(itemId: string) {
+    // Item optimiste encore en vol : rien en DB à supprimer, et la fin de
+    // l'envoi le referait apparaître. On attend qu'il soit réel.
+    if (itemId.startsWith('temp-')) return;
     const item = items.find((i) => i.id === itemId);
     if (!item) return;
 
@@ -345,6 +472,8 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
   }
 
   async function handleDeleteGroup(photoId: string, vocalId: string) {
+    // Un des deux est encore en vol : attendre la fin de l'envoi.
+    if (photoId.startsWith('temp-') || vocalId.startsWith('temp-')) return;
     try {
       const { error: err1 } = await supabase
         .from('capture_items')
@@ -436,7 +565,7 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         <div className="max-w-lg mx-auto w-full px-5 py-4 pb-4">
-        {items.length === 0 && !processing ? (
+        {items.length === 0 ? (
           <div className="text-center py-16">
             <div className="inline-flex items-center justify-center gap-3 mb-6">
               <div className="w-14 h-14 bg-emerald-50 rounded-full flex items-center justify-center">
@@ -461,7 +590,8 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
             {displayGroups.map((group, i) => {
               if (isDisplayGroup(group)) {
                 return (
-                  <div key={group.photo.id} className="animate-card-appear" style={{ animationDelay: `${i * 60}ms` }}>
+                  <div key={group.photo.id} className="animate-card-appear relative" style={{ animationDelay: `${i * 60}ms` }}>
+                    {group.photo.id.startsWith('temp-') && <BadgeEnvoi />}
                     <CaptureItemComponent
                       item={group.photo}
                       linkedVocal={group.linkedVocal}
@@ -473,7 +603,8 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
                 );
               } else {
                 return (
-                  <div key={group.id} className="animate-card-appear" style={{ animationDelay: `${i * 60}ms` }}>
+                  <div key={group.id} className="animate-card-appear relative" style={{ animationDelay: `${i * 60}ms` }}>
+                    {group.type === 'photo' && group.id.startsWith('temp-') && <BadgeEnvoi />}
                     <CaptureItemComponent
                       item={group}
                       onDelete={handleDelete}
@@ -483,13 +614,6 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
                 );
               }
             })}
-          </div>
-        )}
-
-        {processing && (
-          <div className="flex items-center gap-2 text-gray-400 mt-3 px-2">
-            <div className="w-4 h-4 border-2 border-gray-300 border-t-[#1A1A1A] rounded-full animate-spin" />
-            Traitement en cours…
           </div>
         )}
 
@@ -509,7 +633,6 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
             <div className="space-y-2">
               <AudioRecorder
                 onRecordingComplete={handleRecordingComplete}
-                disabled={processing}
                 onRecordingChange={setIsRecording}
                 variant="describe"
                 countdown={describeCountdown}
@@ -523,7 +646,6 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
                 </button>
                 <PhotoCapture
                   onPhotoTaken={handlePhotoTaken}
-                  disabled={processing}
                   compact
                 />
               </div>
@@ -532,12 +654,10 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
             <div className="flex gap-3">
               <AudioRecorder
                 onRecordingComplete={handleRecordingComplete}
-                disabled={processing}
                 onRecordingChange={setIsRecording}
               />
               <PhotoCapture
                 onPhotoTaken={handlePhotoTaken}
-                disabled={processing}
               />
             </div>
           )}
@@ -558,9 +678,12 @@ export default function VisiteClient({ chantier, initialItems, userId }: VisiteC
             <div className="space-y-3">
               <button
                 onClick={handleEndVisit}
-                className="w-full btn-primary text-lg py-4"
+                disabled={pendingCount > 0}
+                className="w-full btn-primary text-lg py-4 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Générer le rapport
+                {pendingCount > 0
+                  ? `Envoi en cours… (${pendingCount})`
+                  : 'Générer le rapport'}
               </button>
               <button
                 onClick={() => setShowEndConfirm(false)}
