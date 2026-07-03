@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { createClient } from '@/lib/supabase/server';
 import { generateReport } from '@/lib/openai';
 import { reportError } from '@/lib/monitoring';
+
+// Génération IA (Claude, jusqu'à 32k tokens de sortie + éventuelle bascule de
+// modèle) : dépasse largement le timeout serverless Vercel par défaut (10s).
+export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,17 +16,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'chantierId manquant' }, { status: 400 });
     }
 
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        cookies: {
-          getAll() { return cookieStore.getAll(); },
-          setAll() {},
-        },
-      }
-    );
+    // Client SESSION (anon + RLS) : le middleware exclut /api, donc l'auth se fait
+    // ICI. La RLS garantit que l'utilisateur ne génère un rapport QUE pour ses
+    // propres chantiers (fini le service-role qui bypassait toute isolation).
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+    }
 
     // Récupérer le chantier
     const { data: chantier, error: chantierError } = await supabase
