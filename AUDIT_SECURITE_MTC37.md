@@ -85,7 +85,7 @@ Le socle est **sain** : RLS stricte sur toutes les tables utilisateur, aucun sec
 - **Fichier** : `app/chantiers/[id]/visite/visite-client.tsx:194`
 - **Preuve** : `createSignedUrl(fileName, 60 * 60 * 24 * 365)` — l'URL signée (audio privé) est valide **un an** et stockée en base. Toute fuite de l'URL donne un accès long.
 - **Impact** : fenêtre d'exposition très longue en cas de fuite de lien.
-- **Correctif** (**verrou — refactor, non auto-appliqué**) : générer l'URL signée **à la volée** à l'affichage avec un TTL court (minutes/heures), au lieu de la persister. Une simple réduction du TTL casserait la lecture des anciens chantiers → refactor à valider.
+- **Correctif (✅ APPLIQUÉ + DÉPLOYÉ)** : constat en corrigeant — `audio_url` **n'est jamais rejoué** dans l'app (seule la transcription est utilisée), il ne servait qu'à localiser le fichier à la suppression. On stocke donc désormais le **chemin storage** (bucket `audio` privé) au lieu d'un lien signé 1 an → **plus aucun lien longue durée à fuiter**. La route DELETE gère les deux formats (anciens liens + nouveaux chemins) et le helper corrige un bug latent (`?token=` faisait échouer en silence le nettoyage des anciens audios). Si un jour on rejoue l'audio, un lien signé court sera généré à la volée côté serveur (RLS).
 
 ### M6 — Dépendances vulnérables (production)
 
