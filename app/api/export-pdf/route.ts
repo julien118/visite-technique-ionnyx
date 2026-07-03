@@ -437,19 +437,7 @@ async function buildPdf(contenu: RapportContenu, origin: string): Promise<Buffer
     }
   }
 
-  // ===== FOOTER =====
-  const pageCount = doc.getNumberOfPages();
-  for (let p = 1; p <= pageCount; p++) {
-    doc.setPage(p);
-    doc.setFontSize(7);
-    doc.setTextColor(180, 180, 180);
-    doc.text(
-      `Rapport généré par ${nomDeploiement()}`,
-      pageWidth / 2,
-      pageHeight - 8,
-      { align: 'center' }
-    );
-  }
+  // Pas de mention en bas de page (retirée à la demande d'Hendrix).
 
   const arrayBuffer = doc.output('arraybuffer');
   return Buffer.from(arrayBuffer);
