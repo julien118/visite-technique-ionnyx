@@ -71,7 +71,7 @@ Le socle est **sain** : RLS stricte sur toutes les tables utilisateur, aucun sec
 - **Fichiers** : `app/api/relances/route.ts:51-58` (et de même `app/api/cron`, `app/api/model-health`, `app/api/usage-digest`)
 - **Preuve** : le secret n'est exigé **que s'il est défini** (`if (secret) { … }`). Si `RELANCES_SECRET` / `CRON_SECRET` n'est pas positionné dans l'environnement, **tout GET est accepté** → déclenchement des relances, lectures DB en `service_role`, notifications Telegram.
 - **Impact** : déclenchement non autorisé de tâches planifiées (spam de relances, sondes) si le secret n'est pas configuré.
-- **Correctif** : passer en **fail-closed** (exiger le secret). ⚠️ **Coordination requise** : les variables `CRON_SECRET` / `RELANCES_SECRET` doivent être **présentes dans Vercel avant** ce changement, sinon les crons cassent. → Proposé, en attente de confirmation (voir « Actions manuelles »).
+- **Correctif (✅ APPLIQUÉ)** : passage en **fail-closed** (secret exigé) sur les 4 routes. Vérifié : `CRON_SECRET` et `RELANCES_SECRET` sont **déjà présents dans Vercel** (Production + Preview) → le passage est sûr et sans coordination (aucun changement pour le chemin nominal ; Vercel Cron envoie `CRON_SECRET` en Bearer, le cron externe envoie déjà `RELANCES_SECRET`). **Aucune variable ré-ajoutée** volontairement (écraser aurait rompu le cron externe). Prend effet au prochain déploiement.
 
 ### M4 — Token pCloud stocké en clair
 
@@ -134,7 +134,7 @@ Le socle est **sain** : RLS stricte sur toutes les tables utilisateur, aucun sec
 ## Actions manuelles (hors périmètre auto — à ta main)
 
 - **Rotation de secrets** : **aucun secret fuité** détecté (code + historique git) → **aucune rotation strictement requise**. À ne faire que si une clé a été partagée hors du système.
-- **Poser `CRON_SECRET` et `RELANCES_SECRET` dans Vercel** *avant* d'activer le fix M3 (sinon les crons cassent).
+- ~~**Poser `CRON_SECRET` et `RELANCES_SECRET` dans Vercel**~~ → **déjà fait** (vérifié via `vercel env ls` : les deux existent en Production + Preview). Après déploiement de la branche, **vérifier que les crons répondent 200** : le cron Vercel (`/api/cron`) automatiquement, et le cron externe (cron-job.org sur `/api/relances`) doit toujours transmettre `RELANCES_SECRET` — c'est déjà le cas aujourd'hui (sinon il recevrait 401 avec le code actuel).
 - **Vérification RLS live** : le MCP Supabase ne voit pas le projet MTC37 (`xuprrfhxwpkyhucgmqmg`) → lancer `get_advisors` / inspecter `pg_policies` depuis le dashboard Supabase du bon projet.
 - **Décider de l'upgrade Next.js 16** (tâche séparée, régression complète).
 - **Vérifier `NEXT_PUBLIC_SENTRY_DSN`** défini en production.
