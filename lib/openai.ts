@@ -39,9 +39,20 @@ export const MODEL_CHAIN: string[] = Array.from(
   ])
 );
 
+// Consommation minimale des tokens d'usage renvoyés par le flux Anthropic.
+interface UsageStream {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+}
+
 export async function generateReport(
   chantier: ChantierData,
-  items: CaptureData[]
+  items: CaptureData[],
+  // Appelé au fil de la génération avec le nombre de caractères déjà produits :
+  // permet à la route d'afficher une progression RÉELLE au lieu d'une animation.
+  onProgress?: (caracteres: number) => void
 ): Promise<RapportContenu> {
   const userPrompt = buildUserPrompt(chantier, items);
   let lastModelError: Error | null = null;
@@ -49,6 +60,9 @@ export async function generateReport(
   for (let i = 0; i < MODEL_CHAIN.length; i++) {
     const model = MODEL_CHAIN[i];
 
+    // stream: true — le contenu produit est identique à l'appel bloquant, mais
+    // les tokens arrivent au fil de l'eau : premier signal en ~1 s au lieu
+    // d'un silence de 30-60 s, et la connexion ne reste jamais muette.
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -59,6 +73,7 @@ export async function generateReport(
       body: JSON.stringify({
         model,
         max_tokens: 32000,
+        stream: true,
         system: SYSTEM_PROMPT_RAPPORT,
         messages: [
           { role: 'user', content: userPrompt },
@@ -66,7 +81,8 @@ export async function generateReport(
       }),
     });
 
-    // 404 = modèle retiré / introuvable → on bascule automatiquement sur le suivant.
+    // 404 = modèle retiré / introuvable → on bascule automatiquement sur le
+    // suivant (l'erreur arrive AVANT le début du flux, la bascule est intacte).
     if (response.status === 404) {
       const errText = await response.text();
       console.warn(`[generateReport] Modèle "${model}" indisponible (404). Bascule sur le suivant. ${errText}`);
@@ -76,14 +92,52 @@ export async function generateReport(
 
     // Autre erreur (rate limit, surcharge, auth…) : ce n'est pas un retrait de
     // modèle, on ne la masque pas en changeant de modèle, on la remonte.
-    if (!response.ok) {
+    if (!response.ok || !response.body) {
       const errorText = await response.text();
       console.error('Erreur Anthropic:', response.status, errorText);
       throw new Error(`Erreur Anthropic: ${response.status}`);
     }
 
-    const result = await response.json();
-    const content = result.content?.[0]?.text;
+    // Lecture du flux SSE Anthropic : on accumule le texte des deltas et on
+    // récupère l'usage (message_start = entrée, message_delta = sortie finale).
+    let content = '';
+    const usage: UsageStream = {};
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let event: {
+          type?: string;
+          message?: { usage?: UsageStream };
+          delta?: { text?: string };
+          usage?: UsageStream;
+          error?: { message?: string };
+        };
+        try {
+          event = JSON.parse(line.slice(6));
+        } catch {
+          continue;
+        }
+        if (event.type === 'message_start' && event.message?.usage) {
+          Object.assign(usage, event.message.usage);
+        } else if (event.type === 'content_block_delta' && event.delta?.text) {
+          content += event.delta.text;
+          onProgress?.(content.length);
+        } else if (event.type === 'message_delta' && event.usage) {
+          Object.assign(usage, event.usage);
+        } else if (event.type === 'error') {
+          throw new Error(`Erreur Anthropic en cours de flux: ${event.error?.message || 'inconnue'}`);
+        }
+      }
+    }
 
     if (!content) {
       throw new Error('Réponse vide de Anthropic');
@@ -101,7 +155,7 @@ export async function generateReport(
     // hebdo/mensuels — APRÈS la réponse HTTP (after garantit l'exécution sans
     // retarder l'utilisateur d'un aller-retour DB). logAnthropicUsage n'échoue
     // jamais.
-    after(logAnthropicUsage(model, result.usage || {}, chantier.id));
+    after(logAnthropicUsage(model, usage, chantier.id));
 
     // Si on a dû utiliser un modèle de repli, on le signale clairement dans les
     // logs (le canari /api/model-health alerte aussi) pour mettre à jour

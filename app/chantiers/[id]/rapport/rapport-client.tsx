@@ -60,7 +60,8 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
-  const stepIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Fraction 0..1 de progression réelle (caractères streamés / rapport typique).
+  const [genProgress, setGenProgress] = useState(0);
   const hasStartedRef = useRef(false);
 
   // ===== Devis (Phase 3) : préparation depuis le rapport =====
@@ -165,17 +166,10 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (generating) {
-      setCurrentStep(0);
-      stepIntervalRef.current = setInterval(() => {
-        setCurrentStep((prev) => prev < GENERATION_STEPS.length - 1 ? prev + 1 : prev);
-      }, 2500);
-    } else {
-      if (stepIntervalRef.current) { clearInterval(stepIntervalRef.current); stepIntervalRef.current = null; }
-    }
-    return () => { if (stepIntervalRef.current) clearInterval(stepIntervalRef.current); };
-  }, [generating]);
+  // La progression est désormais RÉELLE : le serveur streame le nombre de
+  // caractères produits par le modèle (événements SSE), plus d'animation
+  // fictive au chronomètre. ~8000 caractères = rapport typique observé.
+  const CARACTERES_RAPPORT_TYPIQUE = 8000;
 
   // Cleanup blob URL
   useEffect(() => {
@@ -213,17 +207,62 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
   async function handleGenerate() {
     setGenerating(true);
     setError('');
+    setGenProgress(0);
+    setCurrentStep(0);
     try {
       const response = await fetch('/api/generate-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chantierId: chantier.id }),
       });
-      if (!response.ok) {
-        const data = await response.json();
+      const contentType = response.headers.get('content-type') || '';
+      // Erreurs de validation (400/401/404…) : toujours en JSON, comme avant.
+      if (!response.ok || !contentType.includes('text/event-stream') || !response.body) {
+        const data = await response.json().catch(() => ({}));
         throw new Error(data.error || 'Erreur génération');
       }
-      const { rapport: rapportContenu } = await response.json();
+
+      // Flux SSE : progression réelle pendant la génération, puis `fini`
+      // (rapport déjà persisté en DB) ou `erreur`.
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let rapportContenu: RapportContenu | null = null;
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          let ev: { type?: string; caracteres?: number; rapport?: RapportContenu; message?: string };
+          try {
+            ev = JSON.parse(line.slice(6));
+          } catch {
+            continue;
+          }
+          if (ev.type === 'progression' && typeof ev.caracteres === 'number') {
+            const fraction = Math.min(0.97, ev.caracteres / CARACTERES_RAPPORT_TYPIQUE);
+            setGenProgress(fraction);
+            setCurrentStep(
+              Math.min(GENERATION_STEPS.length - 1, Math.floor(fraction * GENERATION_STEPS.length))
+            );
+          } else if (ev.type === 'fini' && ev.rapport) {
+            rapportContenu = ev.rapport;
+            setGenProgress(1);
+            setCurrentStep(GENERATION_STEPS.length - 1);
+          } else if (ev.type === 'erreur') {
+            throw new Error(ev.message || 'Erreur lors de la génération du rapport');
+          }
+        }
+      }
+
+      // Flux interrompu sans `fini` (timeout, coupure réseau…).
+      if (!rapportContenu) {
+        throw new Error('La génération a été interrompue. Réessayez.');
+      }
       setRapport((prev) => ({
         id: prev?.id || '',
         chantier_id: chantier.id,
@@ -494,7 +533,7 @@ export default function RapportClient({ chantier, rapport: initialRapport, hasPC
         {generating && (
           <div className="py-12">
             <div className="h-[3px] bg-gray-200 rounded-full mb-8 overflow-hidden">
-              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${((currentStep + 1) / GENERATION_STEPS.length) * 100}%`, background: 'linear-gradient(90deg, #1A1A1A, #10B981)' }} />
+              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.max(4, genProgress * 100)}%`, background: 'linear-gradient(90deg, #1A1A1A, #10B981)' }} />
             </div>
             <div className="flex justify-center mb-8">
               <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #D1FAE5, #A7F3D0)', animation: 'spin 3s linear infinite' }}>

@@ -5,8 +5,12 @@ import { reportError } from '@/lib/monitoring';
 
 // Génération IA (Claude, jusqu'à 32k tokens de sortie + éventuelle bascule de
 // modèle) : dépasse largement le timeout serverless Vercel par défaut (10s).
+// 120 s (et plus 60) : à ~68 tok/s mesurés, une grosse visite (3000-5000
+// tokens de sortie) prend 44-74 s — le mur des 60 s était atteignable. La
+// réponse est désormais un flux SSE, la connexion n'est jamais muette.
+// NB : si le plan Vercel refuse 120 au déploiement, redescendre à 60.
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function POST(request: NextRequest) {
   try {
@@ -63,71 +67,108 @@ export async function POST(request: NextRequest) {
     const nbPhotosEnvoyees = allPhotoUrls.size;
     const nbVocauxEnvoyes = items.filter((i: { type: string; transcription: string | null }) => i.type === 'vocal' && i.transcription).length;
 
-    // Générer le rapport via Claude
-    const rapportContenu = await generateReport(chantier, items);
+    // Réponse en flux SSE : la progression RÉELLE part vers le client pendant
+    // que Claude génère (fini le silence de 30-120 s avec animation fictive).
+    // L'événement `fini` ne livre le rapport qu'une fois les écritures DB
+    // terminées — le client ne l'affiche jamais avant qu'il soit persisté,
+    // exactement comme l'ancienne réponse JSON.
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const envoyer = (event: Record<string, unknown>) => {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        };
+        try {
+          envoyer({ type: 'depart' });
 
-    // === AUDIT POST-GÉNÉRATION : vérifier que TOUTES les photos sont présentes ===
-    const photosInRapport = new Set<string>();
-    for (const obs of rapportContenu.observations) {
-      for (const photo of obs.photos) {
-        photosInRapport.add(photo.url);
-      }
-    }
+          // Générer le rapport via Claude — progression throttlée (~4/s max).
+          let dernierEnvoi = 0;
+          const rapportContenu = await generateReport(chantier, items, (caracteres) => {
+            const maintenant = Date.now();
+            if (maintenant - dernierEnvoi >= 250) {
+              dernierEnvoi = maintenant;
+              envoyer({ type: 'progression', caracteres });
+            }
+          });
 
-    // Trouver les photos manquantes
-    const missingPhotos: string[] = Array.from(allPhotoUrls).filter(
-      (url) => !photosInRapport.has(url)
-    );
+          // === AUDIT POST-GÉNÉRATION : vérifier que TOUTES les photos sont présentes ===
+          const photosInRapport = new Set<string>();
+          for (const obs of rapportContenu.observations) {
+            for (const photo of obs.photos) {
+              photosInRapport.add(photo.url);
+            }
+          }
 
-    // Si des photos manquent, les ajouter dans une section dédiée
-    if (missingPhotos.length > 0) {
-      console.warn(`[generate-report] ${missingPhotos.length} photo(s) manquante(s) sur ${nbPhotosEnvoyees} — ajout en section supplémentaire`);
+          // Trouver les photos manquantes
+          const missingPhotos: string[] = Array.from(allPhotoUrls).filter(
+            (url) => !photosInRapport.has(url)
+          );
 
-      rapportContenu.observations.push({
-        titre: 'Photos supplémentaires',
-        description: `${missingPhotos.length} photo${missingPhotos.length > 1 ? 's' : ''} supplémentaire${missingPhotos.length > 1 ? 's' : ''} prise${missingPhotos.length > 1 ? 's' : ''} pendant la visite.`,
-        points_vigilance: [],
-        photos: missingPhotos.map((url) => ({
-          url,
-          legende: 'Photo prise pendant la visite',
-        })),
-      });
-    }
+          // Si des photos manquent, les ajouter dans une section dédiée
+          if (missingPhotos.length > 0) {
+            console.warn(`[generate-report] ${missingPhotos.length} photo(s) manquante(s) sur ${nbPhotosEnvoyees} — ajout en section supplémentaire`);
 
-    const nbPhotosDansRapport = photosInRapport.size + missingPhotos.length;
+            rapportContenu.observations.push({
+              titre: 'Photos supplémentaires',
+              description: `${missingPhotos.length} photo${missingPhotos.length > 1 ? 's' : ''} supplémentaire${missingPhotos.length > 1 ? 's' : ''} prise${missingPhotos.length > 1 ? 's' : ''} pendant la visite.`,
+              points_vigilance: [],
+              photos: missingPhotos.map((url) => ({
+                url,
+                legende: 'Photo prise pendant la visite',
+              })),
+            });
+          }
 
-    // Écritures finales EN PARALLÈLE : stats (best-effort, la table
-    // generation_logs peut ne pas exister — supabase-js ne throw pas, l'erreur
-    // est ignorée comme avant), rapport et statut sont indépendants.
-    // L'upsert remplace l'ancien select + update/insert (2 allers-retours → 1) :
-    // l'index unique idx_rapports_chantier_id garantit un seul rapport par
-    // chantier, et contenu_html/pdf_url sont remis à null comme avant pour
-    // invalider le PDF d'une éventuelle génération précédente.
-    await Promise.all([
-      supabase.from('generation_logs').insert({
-        chantier_id: chantierId,
-        nb_photos_envoyees: nbPhotosEnvoyees,
-        nb_photos_dans_rapport: nbPhotosDansRapport,
-        nb_vocaux_envoyes: nbVocauxEnvoyes,
-        nb_photos_manquantes: missingPhotos.length,
-        statut: missingPhotos.length === 0 ? 'ok' : 'photos_ajoutees',
-      }),
-      supabase.from('rapports').upsert(
-        {
-          chantier_id: chantierId,
-          contenu_json: rapportContenu,
-          contenu_html: null,
-          pdf_url: null,
-        },
-        { onConflict: 'chantier_id' }
-      ),
-      supabase
-        .from('chantiers')
-        .update({ statut: 'rapport_genere' })
-        .eq('id', chantierId),
-    ]);
+          const nbPhotosDansRapport = photosInRapport.size + missingPhotos.length;
 
-    return NextResponse.json({ rapport: rapportContenu });
+          // Écritures finales EN PARALLÈLE : stats (best-effort, la table
+          // generation_logs peut ne pas exister — supabase-js ne throw pas,
+          // l'erreur est ignorée comme avant), rapport et statut sont
+          // indépendants. L'upsert remplace l'ancien select + update/insert
+          // (2 allers-retours → 1) : l'index unique idx_rapports_chantier_id
+          // garantit un seul rapport par chantier, et contenu_html/pdf_url sont
+          // remis à null comme avant pour invalider un PDF précédent.
+          await Promise.all([
+            supabase.from('generation_logs').insert({
+              chantier_id: chantierId,
+              nb_photos_envoyees: nbPhotosEnvoyees,
+              nb_photos_dans_rapport: nbPhotosDansRapport,
+              nb_vocaux_envoyes: nbVocauxEnvoyes,
+              nb_photos_manquantes: missingPhotos.length,
+              statut: missingPhotos.length === 0 ? 'ok' : 'photos_ajoutees',
+            }),
+            supabase.from('rapports').upsert(
+              {
+                chantier_id: chantierId,
+                contenu_json: rapportContenu,
+                contenu_html: null,
+                pdf_url: null,
+              },
+              { onConflict: 'chantier_id' }
+            ),
+            supabase
+              .from('chantiers')
+              .update({ statut: 'rapport_genere' })
+              .eq('id', chantierId),
+          ]);
+
+          envoyer({ type: 'fini', rapport: rapportContenu });
+        } catch (error) {
+          console.error('Erreur génération rapport:', error);
+          await reportError('Génération de rapport', error);
+          envoyer({ type: 'erreur', message: 'Erreur lors de la génération du rapport' });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+      },
+    });
   } catch (error) {
     console.error('Erreur génération rapport:', error);
     await reportError('Génération de rapport', error);
