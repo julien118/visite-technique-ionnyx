@@ -131,6 +131,53 @@ export async function sendTelegramAvecId(
   }
 }
 
+/**
+ * Livraison d'une notif de TICKET à Julien, avec la résilience MAXIMALE possible.
+ * On tente d'abord dans le fil dédié (topic) ; si ça échoue (fil supprimé, mauvais
+ * TELEGRAM_TOPIC_ID — le cas typique d'une demande « qui n'arrive pas »), on RETENTE
+ * dans le groupe SANS le fil : Julien voit quand même la demande, et le threading des
+ * réponses (par message_id) continue de fonctionner.
+ * Renvoie le message_id, ou null UNIQUEMENT si aucune tentative n'a abouti (canal HS ou
+ * mal configuré). Dans ce cas l'appelant garde la demande en file (outbox) pour la
+ * re-livrer plus tard → aucune demande n'est jamais perdue. Ne throw JAMAIS.
+ */
+export async function livrerTicketTelegram(
+  text: string,
+  opts: { replyToMessageId?: number; clavier?: ClavierInline } = {},
+): Promise<number | null> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!token || !chatId) return null;
+  const tid = topicId();
+  // 1) essai dans le fil dédié ; 2) repli dans le groupe sans fil si le fil pose problème.
+  const essais = tid ? [tid, undefined] : [undefined];
+  for (const fil of essais) {
+    try {
+      const res = await fetchRetry(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          ...(fil ? { message_thread_id: fil } : {}),
+          text,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+          ...(opts.replyToMessageId ? { reply_to_message_id: opts.replyToMessageId } : {}),
+          ...(opts.clavier ? { reply_markup: opts.clavier } : {}),
+        }),
+        cache: 'no-store',
+      }, { timeoutMs: 8000 });
+      const data = await res.json().catch(() => null);
+      const id = data?.result?.message_id;
+      if (typeof id === 'number') return id;
+      // ok=false (ex. « message thread not found ») → on tente le repli sans fil.
+    } catch {
+      // réseau : on tente le repli, sinon on rendra null (→ file d'attente).
+    }
+  }
+  return null;
+}
+
 // Répond à un clic de bouton (callback_query) : fait disparaître le « spinner » sur
 // le bouton + affiche un petit toast au cliqueur. À appeler TOUJOURS, sinon Telegram
 // laisse le bouton en chargement ~30 s. Best-effort.

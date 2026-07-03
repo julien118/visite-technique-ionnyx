@@ -108,7 +108,7 @@ export default function AssistantTicket({ className = '' }: { className?: string
     setChargementDetail(true)
     chargerDetail(selectedId).finally(() => setChargementDetail(false))
     // Marque CE fil lu (optimiste + serveur).
-    setNonLus((n) => Math.max(0, n - (resumes.find((r) => r.id === selectedId && !r.lu_par_olivier) ? 1 : 0)))
+    setNonLus((n) => Math.max(0, n - (resumes.find((r) => r.id === selectedId && !r.lu_par_client) ? 1 : 0)))
     fetch('/api/tickets/lu', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -414,10 +414,10 @@ export default function AssistantTicket({ className = '' }: { className?: string
                   ) : (
                     (detail?.messages ?? []).map((m) => (
                       <div key={m.id} className="space-y-1">
-                        <div className={`flex ${m.auteur === 'olivier' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`flex ${m.auteur === 'client' ? 'justify-end' : 'justify-start'}`}>
                           <div
                             className={`max-w-[85%] px-3.5 py-2.5 text-sm leading-relaxed shadow-sm whitespace-pre-wrap ${
-                              m.auteur === 'olivier'
+                              m.auteur === 'client'
                                 ? 'bg-primary text-white rounded-2xl rounded-br-md'
                                 : 'bg-white text-foreground border border-border rounded-2xl rounded-bl-md'
                             }`}
@@ -431,8 +431,8 @@ export default function AssistantTicket({ className = '' }: { className?: string
                             {m.texte && m.texte !== '📷 Photo' && <span>{m.texte}</span>}
                           </div>
                         </div>
-                        <p className={`text-[11px] text-gray-400 ${m.auteur === 'olivier' ? 'text-right pr-1' : 'pl-1'}`}>
-                          {m.auteur === 'olivier' ? 'Vous' : 'Julien'} · {formaterDate(m.created_at)}
+                        <p className={`text-[11px] text-gray-400 ${m.auteur === 'client' ? 'text-right pr-1' : 'pl-1'}`}>
+                          {m.auteur === 'client' ? 'Vous' : 'Julien'} · {formaterDate(m.created_at)}
                         </p>
                       </div>
                     ))
@@ -601,7 +601,7 @@ function Onglet({ actif, onClick, children }: { actif: boolean; onClick: () => v
 }
 
 function Carte({ r, onClick }: { r: TicketResume; onClick: () => void }) {
-  const nonLu = !r.lu_par_olivier
+  const nonLu = !r.lu_par_client
   const sousTitre =
     r.statut === 'resolu'
       ? 'Résolu'

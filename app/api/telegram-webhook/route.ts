@@ -281,7 +281,7 @@ export async function POST(request: Request) {
     // Le fil redevient ouvert (relance) + remonte + pastille non-lu côté client.
     await admin
       .from('tickets')
-      .update({ statut: 'ouvert', lu_par_olivier: false, derniere_activite_le: nowIso })
+      .update({ statut: 'ouvert', lu_par_client: false, derniere_activite_le: nowIso })
       .eq('id', ticketId)
 
     // 6) Accusé de réception à Julien (best-effort).

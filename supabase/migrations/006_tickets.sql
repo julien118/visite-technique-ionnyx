@@ -25,7 +25,7 @@ create table if not exists public.tickets (
   contexte jsonb not null default '{}'::jsonb, -- { path, chantierId, chantierLabel, viewport, userAgent }
   statut text not null default 'ouvert',       -- 'ouvert' | 'resolu'
   telegram_message_id bigint,                  -- matching des réponses Telegram (en-tête, legacy)
-  lu_par_olivier boolean not null default true,-- pastille non-lu côté client (nom littéral conservé d'ATG)
+  lu_par_client boolean not null default true, -- pastille non-lu côté client (celui qui utilise l'app)
   categorie text,                              -- 'probleme'|'amelioration'|'question'|'autre' (IA)
   titre text,                                  -- résumé IA 3–6 mots
   reponse text,                                -- (legacy 1-réponse, conservé pour compat)
@@ -39,7 +39,7 @@ create index if not exists tickets_telegram_msg_idx on public.tickets (telegram_
 create table if not exists public.ticket_messages (
   id uuid primary key default gen_random_uuid(),
   ticket_id uuid not null references public.tickets(id) on delete cascade,
-  auteur text not null,                        -- 'olivier' (= le client) | 'julien'
+  auteur text not null,                        -- 'client' (= celui qui utilise l'app) | 'julien' (= le support)
   texte text not null,
   telegram_message_id bigint,                  -- id du message bot posté (matching des replies) ; null côté julien
   created_at timestamptz not null default now()

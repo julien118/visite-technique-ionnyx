@@ -171,7 +171,7 @@ export type TicketStatut = 'ouvert' | 'resolu';
 // Un message dans un fil de discussion (table ticket_messages).
 export interface TicketMessage {
   id: string;
-  auteur: 'olivier' | 'julien'; // 'olivier' = le client (étiquette littérale conservée d'ATG)
+  auteur: 'client' | 'julien'; // 'client' = celui qui utilise l'app (Hendrix sur MTC37) | 'julien' = le support
   texte: string;
   image_url?: string | null;    // photo jointe (bucket public `photos`), optionnelle
   created_at: string;
@@ -184,10 +184,10 @@ export interface TicketResume {
   statut: TicketStatut;
   titre: string | null;
   apercu: string; // titre IA si présent, sinon début du 1er message
-  lu_par_olivier: boolean;
+  lu_par_client: boolean;
   derniere_activite_le: string | null;
   nb_messages: number;
-  dernier_auteur: 'olivier' | 'julien' | null;
+  dernier_auteur: 'client' | 'julien' | null;
 }
 
 // Détail d'un fil renvoyé par GET /api/tickets/[id].

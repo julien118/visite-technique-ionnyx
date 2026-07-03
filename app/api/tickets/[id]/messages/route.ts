@@ -7,7 +7,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { sendTelegramAvecId, sendTelegramFichierAudio, sendTelegramPhoto } from '@/lib/notify'
+import { livrerTicketTelegram, sendTelegramFichierAudio, sendTelegramPhoto } from '@/lib/notify'
 import { uploadTicketPhoto } from '@/lib/ticket-photos'
 import { formaterRelanceClient } from '@/lib/ticket-telegram'
 import { reportError } from '@/lib/monitoring'
@@ -67,10 +67,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .maybeSingle()
     const replyTo = dernier?.telegram_message_id ?? undefined
 
-    const messageId = await sendTelegramAvecId(formaterRelanceClient(ticket.titre, message), replyTo)
+    const messageId = await livrerTicketTelegram(formaterRelanceClient(ticket.titre, message), {
+      replyToMessageId: replyTo,
+    })
+    // Échec de l'envoi immédiat → la relance reste en file (sans telegram_message_id) et
+    // sera ré-expédiée automatiquement (GET suivant / cron). Alerte, jamais de silence.
+    if (messageId === null) {
+      await reportError(
+        'Relance ticket non livrée',
+        new Error('Telegram injoignable à l’envoi immédiat'),
+        `ticket ${ticket.id} — relance MISE EN FILE, re-livraison auto`,
+      )
+    }
     await supabase.from('ticket_messages').insert({
       ticket_id: ticket.id,
-      auteur: 'olivier',
+      auteur: 'client',
       texte: message,
       telegram_message_id: messageId,
       image_url: photoUrl,

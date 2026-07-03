@@ -13,7 +13,9 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { sendTelegramAvecId, sendTelegramFichierAudio, sendTelegramPhoto } from '@/lib/notify'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { livrerTicketTelegram, sendTelegramFichierAudio, sendTelegramPhoto } from '@/lib/notify'
+import { livrerNotifsEnAttente } from '@/lib/ticket-outbox'
 import { uploadTicketPhoto } from '@/lib/ticket-photos'
 import { formaterOuverture, clavierTicket } from '@/lib/ticket-telegram'
 import { analyserMessage } from '@/lib/ticket-classifier'
@@ -133,15 +135,25 @@ export async function POST(request: Request) {
     if (photo) photoUrl = await uploadTicketPhoto(photo, ticket.id)
 
     // Notif Telegram (avec titre + boutons « Je prends » / « Résolu ») et
-    // mémorisation du message_id sur le 1er message du fil.
-    const messageId = await sendTelegramAvecId(
+    // mémorisation du message_id sur le 1er message du fil. Envoi résilient : fil dédié
+    // puis repli dans le groupe si le fil pose problème.
+    const messageId = await livrerTicketTelegram(
       formaterOuverture(titre || null, message, contexte),
-      undefined,
-      clavierTicket(ticket.id),
+      { clavier: clavierTicket(ticket.id) },
     )
+    // Échec de l'envoi immédiat → la demande reste en file (message sans telegram_message_id)
+    // et sera ré-expédiée automatiquement (GET suivant / cron). On alerte pour ne JAMAIS
+    // échouer en silence — c'est ce qui manquait.
+    if (messageId === null) {
+      await reportError(
+        'Notif ticket non livrée',
+        new Error('Telegram injoignable à l’envoi immédiat'),
+        `ticket ${ticket.id} — demande MISE EN FILE, re-livraison auto`,
+      )
+    }
     await supabase.from('ticket_messages').insert({
       ticket_id: ticket.id,
-      auteur: 'olivier',
+      auteur: 'client',
       texte: message,
       telegram_message_id: messageId,
       image_url: photoUrl,
@@ -173,10 +185,16 @@ export async function GET() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ tickets: [], nonLus: 0 }, { status: 401 })
 
+    // Filet de sécurité opportuniste : à chaque consultation (le widget « ? » poll ~30 s),
+    // on ré-expédie les demandes qui n'auraient pas atterri sur Telegram. Best-effort et
+    // borné (cas courant : 0 en attente → une requête indexée). Service-role car la
+    // re-livraison sort du périmètre RLS de l'utilisateur.
+    await livrerNotifsEnAttente(createAdminClient()).catch(() => {})
+
     // RLS filtre déjà par user → pas de .eq('user_id').
     const { data: tks } = await supabase
       .from('tickets')
-      .select('id, categorie, statut, titre, message, lu_par_olivier, derniere_activite_le, created_at')
+      .select('id, categorie, statut, titre, message, lu_par_client, derniere_activite_le, created_at')
       .order('derniere_activite_le', { ascending: false, nullsFirst: false })
       .limit(80)
 
@@ -184,7 +202,7 @@ export async function GET() {
     const ids = tickets.map((t) => t.id)
 
     // Agrégat des messages par fil (nombre + dernier auteur).
-    const agg = new Map<string, { nb: number; last: string; auteur: 'olivier' | 'julien' }>()
+    const agg = new Map<string, { nb: number; last: string; auteur: 'client' | 'julien' }>()
     if (ids.length) {
       const { data: msgs } = await supabase
         .from('ticket_messages')
@@ -213,13 +231,13 @@ export async function GET() {
         statut: normaliserStatut(t.statut),
         titre: t.titre,
         apercu,
-        lu_par_olivier: t.lu_par_olivier,
+        lu_par_client: t.lu_par_client,
         derniere_activite_le: t.derniere_activite_le ?? t.created_at,
         nb_messages: a?.nb ?? 0,
         dernier_auteur: a?.auteur ?? null,
       }
     })
-    const nonLus = tickets.filter((t) => !t.lu_par_olivier).length
+    const nonLus = tickets.filter((t) => !t.lu_par_client).length
     return NextResponse.json(
       { tickets: resumes, nonLus },
       { headers: { 'Cache-Control': 'no-store, max-age=0' } },

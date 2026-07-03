@@ -124,7 +124,7 @@ async function envoyerRelances(
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
-    if (dernier?.auteur !== 'olivier') continue
+    if (dernier?.auteur !== 'client') continue
 
     // On relie la relance au message d'origine (thread) si on le retrouve.
     const { data: ouverture } = await admin
@@ -168,7 +168,7 @@ async function rattraperNotifsRatees(
   const { data: ratees } = await admin
     .from('ticket_messages')
     .select('id, ticket_id, texte')
-    .eq('auteur', 'olivier')
+    .eq('auteur', 'client')
     .is('telegram_message_id', null)
     .gte('created_at', depuis)
     .order('created_at', { ascending: true })

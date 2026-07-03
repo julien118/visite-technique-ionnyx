@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { buildDigest } from '@/lib/usage';
 import { sendTelegram, notify } from '@/lib/notify';
+import { livrerNotifsEnAttente } from '@/lib/ticket-outbox';
 import { reportError } from '@/lib/monitoring';
 
 // Dispatcher cron UNIQUE (appelé une fois par jour par Vercel Cron).
@@ -59,6 +61,19 @@ export async function GET(request: NextRequest) {
     }
   } catch (e) {
     console.error('[cron] model-health:', e);
+  }
+
+  // 2bis) Outbox tickets : filet absolu — ré-expédie toute demande client qui ne
+  // serait pas arrivée sur Telegram (canal HS au moment de l'envoi). Aucune demande perdue.
+  try {
+    const relivrees = await livrerNotifsEnAttente(createAdminClient(), 50);
+    ran.push(`tickets-outbox:${relivrees}`);
+    if (relivrees > 0) {
+      await sendTelegram(`📮 ${relivrees} demande(s) client en attente ont été (re)transmises.`);
+    }
+  } catch (e) {
+    console.error('[cron] tickets-outbox:', e);
+    await reportError('Cron — outbox tickets', e);
   }
 
   // 3) Digest hebdomadaire — le dimanche (jour 0 en UTC).
