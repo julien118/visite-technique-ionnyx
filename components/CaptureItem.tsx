@@ -3,6 +3,7 @@
 import { CaptureItem as CaptureItemType } from '@/lib/types';
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import PhotoVignette from '@/components/PhotoVignette';
 
 interface CaptureItemProps {
   item: CaptureItemType;
@@ -123,7 +124,7 @@ function LinkedCard({
       {/* Photo */}
       {photo.photo_url && (
         <button onClick={() => setFullscreen(true)} className="w-full px-4 flex justify-center">
-          <img
+          <PhotoVignette
             src={photo.photo_url}
             alt="Photo chantier"
             className="max-w-full max-h-64 w-auto h-auto object-contain rounded-lg"
@@ -413,7 +414,7 @@ function PhotoCard({
       {/* Miniature photo — clic pour plein écran */}
       {item.photo_url && (
         <button onClick={() => setFullscreen(true)} className="w-full flex justify-center">
-          <img
+          <PhotoVignette
             src={item.photo_url}
             alt="Photo chantier"
             className="max-w-full max-h-64 w-auto h-auto object-contain rounded-lg"

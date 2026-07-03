@@ -2,6 +2,19 @@ import { withSentryConfig } from '@sentry/nextjs';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Autorise next/image à optimiser les photos de chantier stockées sur
+  // Supabase Storage : les vignettes de la timeline et du rapport sont servies
+  // en WebP redimensionné (~30-80 Ko) au lieu de l'original 1920px (0,6-2 Mo
+  // mesurés). L'original reste servi tel quel au zoom plein écran.
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '*.supabase.co',
+        pathname: '/storage/v1/object/public/photos/**',
+      },
+    ],
+  },
   // Outil privé réservé au client MTC37 : ne doit JAMAIS apparaître dans Google.
   // Header noindex sur TOUTES les routes (pages, API, assets). C'est ce header
   // (et non un Disallow dans robots.txt) qui garantit le retrait de l'index.

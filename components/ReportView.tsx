@@ -2,6 +2,7 @@
 
 import { RapportContenu, RapportObservation } from '@/lib/types';
 import { useState, useRef } from 'react';
+import PhotoVignette from '@/components/PhotoVignette';
 
 function renderBoldText(text: string) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
@@ -182,11 +183,9 @@ function ObservationBlock({
         <div className="px-4 pb-3 space-y-3">
           {(obs.photos ?? []).map((photo, pIdx) => (
             <div key={pIdx} className="flex flex-col items-center">
-              <img
+              <PhotoVignette
                 src={photo.url}
                 alt={photo.legende}
-                loading="lazy"
-                decoding="async"
                 onClick={() => onPhotoClick(photo.url)}
                 className="w-auto max-w-full max-h-96 rounded-lg cursor-pointer hover:opacity-95 transition-opacity"
               />
