@@ -5,6 +5,10 @@ import { RapportContenu } from '@/lib/types';
 import { nomDeploiement } from '@/lib/notify';
 import jsPDF from 'jspdf';
 
+// La construction jsPDF est instantanée ; le temps part dans les fetches
+// d'images. 60 s = large marge, aligné sur les autres routes.
+export const maxDuration = 60;
+
 // Slug de nom de fichier : « Jérôme Lechat » → « jerome-lechat » (sans accents ni
 // caractères spéciaux), pour un nom de PDF propre et personnalisé à la ATG.
 function slugify(s: string): string {
@@ -13,6 +17,65 @@ function slugify(s: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+// ===== Assainissement du texte pour jsPDF =====
+// Les polices standard de jsPDF (helvetica) n'encodent que WinAnsi (latin-1 +
+// quelques signes typographiques). UN SEUL caractère hors de ce jeu (ex. « ≈ »
+// généré par l'IA) fait basculer TOUTE la ligne en encodage 16 bits : texte
+// espacé lettre à lettre qui déborde de la page. On remplace donc les
+// caractères connus par un équivalent lisible, et on retire les autres.
+// Codes Unicode -> equivalent ASCII (codes numeriques : pas de caracteres
+// invisibles dans la source). Les espaces Unicode (insecable fine U+202F,
+// etc.) sont couvertes par le repli NFKD plus bas (elles se decomposent en
+// espace simple).
+const REMPLACEMENTS_PDF = new Map<number, string>([
+  [0x2248, '~'],   // approximativement egal (celui qui cassait les legendes)
+  [0x2260, '!='],  // different
+  [0x2264, '<='],  // inferieur ou egal
+  [0x2265, '>='],  // superieur ou egal
+  [0x2212, '-'],   // signe moins mathematique
+  [0x2192, '->'],  // fleche droite
+  [0x2190, '<-'],  // fleche gauche
+  [0x2032, "'"],   // prime (minutes)
+  [0x2033, '"'],   // double prime (secondes)
+  [0x2044, '/'],   // barre de fraction
+]);
+// WinAnsi = latin-1 + ces caractères de la plage 0x80-0x9F (€ ‘ ’ “ ” • – — … œ Œ ™ etc.)
+const WINANSI_EXTRAS = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ';
+
+function pdfSafe(texte: string): string {
+  let sortie = '';
+  for (const c of texte) {
+    const code = c.codePointAt(0)!;
+    if (code <= 0xff || WINANSI_EXTRAS.includes(c)) {
+      sortie += c;
+    } else if (REMPLACEMENTS_PDF.has(code)) {
+      sortie += REMPLACEMENTS_PDF.get(code)!;
+    } else {
+      // Dernier recours : décomposer (é composé, ligatures…) et garder la
+      // partie latin-1 ; sinon le caractère est retiré plutôt que de casser
+      // l'encodage de toute la ligne.
+      const decompose = c.normalize('NFKD');
+      for (const d of decompose) {
+        if (d.codePointAt(0)! <= 0xff) sortie += d;
+      }
+    }
+  }
+  return sortie;
+}
+
+// Applique pdfSafe à toutes les chaînes d'un objet (le contenu du rapport tel
+// qu'il sort de l'IA). Ne touche que le RENDU PDF — la DB reste intacte.
+function assainirPourPdf<T>(valeur: T): T {
+  if (typeof valeur === 'string') return pdfSafe(valeur) as T;
+  if (Array.isArray(valeur)) return valeur.map(assainirPourPdf) as T;
+  if (valeur && typeof valeur === 'object') {
+    const copie: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(valeur)) copie[k] = assainirPourPdf(v);
+    return copie as T;
+  }
+  return valeur;
 }
 
 export async function POST(request: NextRequest) {
@@ -51,7 +114,9 @@ export async function POST(request: NextRequest) {
       .eq('id', chantierId)
       .single();
 
-    const contenu = rapport.contenu_json as RapportContenu;
+    // Assainissement pour l'encodage WinAnsi de jsPDF (un « ≈ » de l'IA
+    // cassait des lignes entières en texte espacé qui débordait de la page).
+    const contenu = assainirPourPdf(rapport.contenu_json as RapportContenu);
     // On passe l'origine de la requête pour charger le logo depuis /public (asset
     // servi par le même déploiement — marche en local comme sur Vercel).
     const pdfBuffer = await buildPdf(contenu, request.nextUrl.origin);
@@ -104,9 +169,12 @@ interface FetchedImage {
   height: number;
 }
 
-async function fetchImageAsBase64(url: string): Promise<FetchedImage | null> {
+async function fetchImageAsBase64(
+  url: string,
+  headers?: Record<string, string>
+): Promise<FetchedImage | null> {
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, headers ? { headers } : undefined);
     if (!res.ok) return null;
     const buffer = await res.arrayBuffer();
     const base64 = Buffer.from(buffer).toString('base64');
@@ -152,7 +220,30 @@ function getImageDimensions(data: Uint8Array): { width: number; height: number }
   return { width: 1920, height: 1440 };
 }
 
+// Photo via l'optimiseur d'images du déploiement : JPEG redimensionné 1200 px
+// (~150-250 Ko au lieu des 0,6-2 Mo stockés — largement suffisant pour un A4).
+// `Accept: image/jpeg` force un JPEG (jamais de webp, que jsPDF ne lit pas).
+// Repli sur l'original si l'optimiseur échoue.
+async function fetchPhotoOptimisee(url: string, origin: string): Promise<FetchedImage | null> {
+  const optimisee = `${origin}/_next/image?url=${encodeURIComponent(url)}&w=1200&q=75`;
+  const via = await fetchImageAsBase64(optimisee, { Accept: 'image/jpeg' });
+  if (via && via.dataUri.startsWith('data:image/jpeg')) return via;
+  return fetchImageAsBase64(url);
+}
+
 async function buildPdf(contenu: RapportContenu, origin: string): Promise<Buffer> {
+  // Toutes les images partent EN PARALLÈLE (logo + photos redimensionnées) au
+  // lieu d'un fetch séquentiel par photo au fil de la mise en page. Avec les
+  // originaux, le PDF pesait ~8 Mo (au-delà de la limite de réponse Vercel de
+  // 4,5 Mo) et mettait des minutes à arriver ; le voilà autour de ~1 Mo.
+  const urlsPhotos = contenu.observations.flatMap((o) => o.photos.map((p) => p.url));
+  const [logo, ...photosChargees] = await Promise.all([
+    fetchImageAsBase64(`${origin}/logo-mtc37.png`),
+    ...urlsPhotos.map((u) => fetchPhotoOptimisee(u, origin)),
+  ]);
+  const imagesParUrl = new Map<string, FetchedImage | null>();
+  urlsPhotos.forEach((u, i) => imagesParUrl.set(u, photosChargees[i]));
+
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -183,9 +274,8 @@ async function buildPdf(contenu: RapportContenu, origin: string): Promise<Buffer
   doc.setFillColor(26, 26, 26);
   doc.rect(0, 0, pageWidth, bandH, 'F');
 
-  // Logo MTC37 (blanc, fond transparent → pensé pour la bande noire), chargé depuis
-  // /public. Repli texte sur le nom de l'entreprise si l'asset est indisponible.
-  const logo = await fetchImageAsBase64(`${origin}/logo-mtc37.png`);
+  // Logo MTC37 (blanc, fond transparent → pensé pour la bande noire), préchargé
+  // ci-dessus. Repli texte sur le nom de l'entreprise si l'asset est indisponible.
   let logoOk = false;
   if (logo && logo.width > 0) {
     try {
@@ -286,9 +376,9 @@ async function buildPdf(contenu: RapportContenu, origin: string): Promise<Buffer
     }
     y += 5;
 
-    // Photos intégrées
+    // Photos intégrées (préchargées en parallèle en tête de fonction)
     for (const photo of obs.photos) {
-      const imgResult = await fetchImageAsBase64(photo.url);
+      const imgResult = imagesParUrl.get(photo.url) ?? null;
       if (imgResult) {
         try {
           // max 85% largeur, max ~108mm hauteur (~380px à 72dpi ≈ 108mm à 25.4mm/in)
