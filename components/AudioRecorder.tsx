@@ -22,18 +22,36 @@ export default function AudioRecorder({ onRecordingComplete, disabled, onRecordi
     }
 
     try {
-      // Mono + 32 kbps : le seul consommateur est la transcription Whisper, qui
-      // resample tout en 16 kHz mono — l'opus voix à 32 kbps est transparent
-      // pour elle (vérifié : transcription identique au 128 kbps stéréo) mais
-      // pèse ~4× moins sur la 4G de chantier. Les navigateurs qui ignorent ces
-      // hints retombent sur leur défaut (comportement d'avant).
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1 },
-      });
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus',
-        audioBitsPerSecond: 32000,
-      });
+      // Réglages micro par défaut du navigateur (annulation d'écho / réduction
+      // de bruit) : plus fiable que d'imposer channelCount qui, sur certains
+      // appareils/entrées, se traduisait par un flux muet.
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // Choisir un conteneur RÉELLEMENT supporté. Safari / iOS ne connaissent
+      // PAS webm → sans repli, la capture partait muette/cassée sur iPhone (le
+      // terrain !). On tente opus/webm (Chrome), puis mp4 (Safari), sinon on
+      // laisse le défaut du navigateur.
+      const candidats = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4;codecs=mp4a.40.2',
+        'audio/mp4',
+        'audio/ogg;codecs=opus',
+      ];
+      const typeSupporte =
+        typeof MediaRecorder !== 'undefined' &&
+        typeof MediaRecorder.isTypeSupported === 'function'
+          ? candidats.find((t) => MediaRecorder.isTypeSupported(t))
+          : undefined;
+
+      // On garde l'opus 32 kbps (léger pour la 4G, transparent pour Whisper)
+      // UNIQUEMENT quand un conteneur opus est retenu ; sinon défaut navigateur.
+      const options: MediaRecorderOptions = {};
+      if (typeSupporte) {
+        options.mimeType = typeSupporte;
+        if (typeSupporte.includes('opus')) options.audioBitsPerSecond = 32000;
+      }
+      const mediaRecorder = new MediaRecorder(stream, options);
 
       chunksRef.current = [];
 
@@ -45,14 +63,23 @@ export default function AudioRecorder({ onRecordingComplete, disabled, onRecordi
 
       mediaRecorder.onstop = () => {
         stream.getTracks().forEach((track) => track.stop());
-        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        // Type réel choisi par le MediaRecorder (webm sur Chrome, mp4 sur Safari…).
+        const type = mediaRecorder.mimeType || typeSupporte || 'audio/webm';
+        const audioBlob = new Blob(chunksRef.current, { type });
+        if (audioBlob.size < 1024) {
+          // Quasi rien capté : le micro n'a pas fourni d'audio (souvent une
+          // permission micro OS/navigateur, pas un bug applicatif).
+          console.warn('[AudioRecorder] blob quasi vide:', audioBlob.size, 'octets — micro muet ?');
+        }
         setRecording(false);
         onRecordingChange?.(false);
         onRecordingComplete(audioBlob);
       };
 
       mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.start();
+      // timeslice : force la livraison régulière des données (évite un blob
+      // final vide sur enregistrements courts et fiabilise iOS).
+      mediaRecorder.start(1000);
       setRecording(true);
       onRecordingChange?.(true);
     } catch (err) {
